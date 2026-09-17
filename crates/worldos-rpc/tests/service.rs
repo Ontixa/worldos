@@ -70,21 +70,33 @@ fn undo_redo_via_rpc() {
 fn mcp_initialize_list_and_call() {
     let svc = svc();
     let session = concat!(
-        r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}"#, "\n",
-        r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#, "\n",
-        r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#, "\n",
-        r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"object_create","arguments":{"type":"core:note","name":"mcp-note"}}}"#, "\n",
-        r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"project_search","arguments":{"text":"mcp"}}}"#, "\n",
+        r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}"#,
+        "\n",
+        r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
+        "\n",
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#,
+        "\n",
+        r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"object_create","arguments":{"type":"core:note","name":"mcp-note"}}}"#,
+        "\n",
+        r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"project_search","arguments":{"text":"mcp"}}}"#,
+        "\n",
     );
     let mut out = Vec::new();
     worldos_rpc::mcp::serve_mcp(&svc, session.as_bytes(), &mut out).unwrap();
     let text = String::from_utf8(out).unwrap();
-    let resps: Vec<Value> = text.lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+    let resps: Vec<Value> = text
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
     assert_eq!(resps.len(), 4, "{text}");
 
     assert!(resps[0]["result"]["capabilities"]["tools"].is_object());
     let tools = resps[1]["result"]["tools"].as_array().unwrap();
-    assert!(tools.len() >= 10, "expected tool catalog, got {}", tools.len());
+    assert!(
+        tools.len() >= 10,
+        "expected tool catalog, got {}",
+        tools.len()
+    );
     // object_create succeeded (content is JSON text or structured result)
     let call_out = &resps[2]["result"];
     assert!(call_out.get("isError") != Some(&json!(true)), "{call_out}");
@@ -100,7 +112,10 @@ fn mcp_parse_error_line_returns_error_and_continues() {
     let mut out = Vec::new();
     worldos_rpc::mcp::serve_mcp(&svc, session.as_bytes(), &mut out).unwrap();
     let text = String::from_utf8(out).unwrap();
-    let resps: Vec<Value> = text.lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+    let resps: Vec<Value> = text
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
     assert_eq!(resps[0]["error"]["code"], -32700);
     assert_eq!(resps[1]["id"], 9); // ping still answered
 }

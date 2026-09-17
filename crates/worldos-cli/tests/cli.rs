@@ -16,11 +16,16 @@ fn new_command_inspect_undo_redo_flow() {
     let dir = tempfile::tempdir().unwrap();
     let f = proj(&dir);
 
-    worldos().args(["new", "t", "--path", &f]).assert().success();
+    worldos()
+        .args(["new", "t", "--path", &f])
+        .assert()
+        .success();
 
     worldos()
         .args([
-            "command", &f, "object.create",
+            "command",
+            &f,
+            "object.create",
             r#"{"type":"core:note","name":"cli-note","components":{"doc:text":{"text":"x"}}}"#,
         ])
         .assert()
@@ -48,7 +53,10 @@ fn missing_file_and_bad_command_fail_cleanly() {
 
     worldos().args(["inspect", &f]).assert().failure();
 
-    worldos().args(["new", "t", "--path", &f]).assert().success();
+    worldos()
+        .args(["new", "t", "--path", &f])
+        .assert()
+        .success();
     worldos()
         .args(["command", &f, "not.a.command", "{}"])
         .assert()
@@ -65,10 +73,17 @@ fn history_and_validate_subcommands() {
     let dir = tempfile::tempdir().unwrap();
     let f = proj(&dir);
 
-    worldos().args(["new", "t", "--path", &f]).assert().success();
     worldos()
-        .args(["command", &f, "geometry.create_primitive",
-               r#"{"kind":"cube","name":"c1"}"#])
+        .args(["new", "t", "--path", &f])
+        .assert()
+        .success();
+    worldos()
+        .args([
+            "command",
+            &f,
+            "geometry.create_primitive",
+            r#"{"kind":"cube","name":"c1"}"#,
+        ])
         .assert()
         .success();
 
@@ -80,5 +95,8 @@ fn history_and_validate_subcommands() {
 
     worldos().args(["validate", &f]).assert().success();
     worldos().args(["doctor"]).assert().success();
-    worldos().args(["commands", &f, "--json"]).assert().success();
+    worldos()
+        .args(["commands", &f, "--json"])
+        .assert()
+        .success();
 }
