@@ -11,7 +11,9 @@ license = "MPL-2.0"
 
 [lib]
 name = "worldos_desktop_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# rlib only: desktop targets consume the lib normally; staticlib/cdylib are
+# for mobile and break MinGW linking (export ordinal too large).
+crate-type = ["rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

@@ -25,28 +25,23 @@ jobs:
       - name: test
         run: cargo test --workspace
 
-  sdk-typescript:
-    name: typescript sdk
+  sdks:
+    name: typescript + python sdks
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm ci --workspace packages/sdk-typescript --include-workspace-root=false
-        working-directory: packages/sdk-typescript
-      - run: npm run build
-        working-directory: packages/sdk-typescript
-
-  sdk-python:
-    name: python sdk
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m py_compile sdks/worldos-py/worldos.py
+      - name: install workspaces
+        run: npm ci
+      - name: build TS SDK
+        run: npm run build -w @worldos/sdk
+      - name: compile Python SDK
+        run: python -m py_compile sdks/worldos-py/worldos.py
 
   desktop:
     name: desktop app (check)
@@ -61,8 +56,6 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
-        working-directory: apps/desktop
-      - run: npm run build
-        working-directory: apps/desktop
+      - run: npm run build -w @worldos/desktop
       - run: cargo check
         working-directory: apps/desktop/src-tauri
