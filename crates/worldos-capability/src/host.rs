@@ -41,6 +41,12 @@ pub trait CapabilityHost {
     /// Run all registered validators and return a structured report.
     fn validate(&self) -> Result<ValidationReport, CapabilityError>;
 
+    /// Backing file path, if any — handed to hosted plugins as
+    /// `WORLDOS_PROJECT` so they can name the project they're inside.
+    fn project_path(&self) -> Option<std::path::PathBuf> {
+        None
+    }
+
     /// Resolve an object by id-or-name helper string.
     fn resolve_object(&self, id_or_name: &str) -> Option<worldos_kernel::ObjectId> {
         if let Ok(id) = id_or_name.parse()

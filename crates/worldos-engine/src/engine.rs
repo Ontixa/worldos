@@ -490,6 +490,9 @@ impl CapabilityHost for Engine {
     fn in_transaction(&self) -> bool {
         Engine::in_transaction(self)
     }
+    fn project_path(&self) -> Option<PathBuf> {
+        self.path.clone()
+    }
     fn command_schemas(&self) -> Vec<CommandSchema> {
         self.registry.schemas()
     }

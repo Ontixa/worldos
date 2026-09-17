@@ -16,7 +16,7 @@ thiserror.workspace = true
 tracing.workspace = true
 ulid.workspace = true
 time.workspace = true
-ureq = { workspace = true, optional = true }
+ureq = { workspace = true, features = ["json"], optional = true }
 
 [features]
 default = []

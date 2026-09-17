@@ -39,7 +39,7 @@ impl Capability for AgentRun {
             .get("agent")
             .and_then(|a| a.as_str())
             .unwrap_or("assistant");
-        let rt = AgentRuntime::default();
+        let rt = AgentRuntime::from_env();
         let report = rt.run(host, goal, agent);
         serde_json::to_value(report).map_err(CapabilityError::Serde)
     }

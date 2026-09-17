@@ -76,11 +76,26 @@ agent's actions are indistinguishable in history from a human's.
 
 `worldos-agent` = plan → act → verify, on top of `CapabilityHost`:
 
-1. **Plan** — rule-based planner today; `ModelProvider` trait is the
-   BYOK seam for LLM planners consuming live `command_schemas()`.
+1. **Plan** — `RulePlanner` (offline, deterministic) or `LlmPlanner`
+   (feature `llm`, BYOK OpenAI-compatible endpoints via `WORLDOS_LLM_*`),
+   wrapped in `FallbackPlanner` so provider failure degrades to rules.
+   Malformed model output gets one self-repair reprompt; proposed
+   commands are validated against live `command_schemas()`.
 2. **Act** — `begin_transaction_as(agent)` → `run_command_as` per step.
 3. **Verify** — resolve created objects, check they exist, emit a
    structured `AgentReport` (also recorded as a `core:agent-task` object).
+
+## Plugins
+
+`worldos-plugin-*` executables are hosted subprocesses: the engine serves
+a line-delimited JSON-RPC channel over the plugin's stdin/stdout, scoped
+to a read surface + `command.execute`. The session runs as the
+`plugin:<name>` actor inside ONE transaction — committed on clean exit,
+rolled back on crash/timeout/protocol violation. Discovery scans
+`plugins/` dirs, `~/.worldos/plugins`, `WORLDOS_PLUGIN_PATH`, and PATH;
+script extensions get interpreters (`.py`, `.ps1`, `.cmd`). Same channel
+is exposed as the `plugin.run` capability so agents/MCP/SDK clients can
+invoke plugins.
 
 ## Persistence
 

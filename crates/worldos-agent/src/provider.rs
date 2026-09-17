@@ -94,13 +94,14 @@ impl ModelProvider for OpenAiCompatible {
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.2,
         });
-        let resp = ureq::post(format!("{}/chat/completions", self.base_url))
+        let mut resp = ureq::post(format!("{}/chat/completions", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
             .send_json(&body)
             .map_err(|e| ProviderError::Request(e.to_string()))?;
         let json: serde_json::Value = resp
-            .into_json()
+            .body_mut()
+            .read_json()
             .map_err(|e| ProviderError::Response(e.to_string()))?;
         json["choices"][0]["message"]["content"]
             .as_str()

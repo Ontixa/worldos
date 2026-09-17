@@ -5,7 +5,7 @@ use crate::error::CapabilityError;
 use crate::host::CapabilityHost;
 use crate::registry::Capability;
 use serde_json::{Value, json};
-use worldos_kernel::known::{components, permissions};
+use worldos_kernel::known::permissions;
 
 fn fail(e: impl std::fmt::Display) -> CapabilityError {
     CapabilityError::Failed(e.to_string())
@@ -174,85 +174,20 @@ impl Capability for GeometryMeasure {
             .resolve_object(key)
             .ok_or_else(|| fail(format!("object `{key}` not found")))?;
         let obj = host.project().get(oid).ok_or_else(|| fail("gone"))?;
-        let geom = obj
-            .component_data(components::GEOMETRY)
-            .cloned()
-            .unwrap_or(json!({}));
-        let xf = obj
-            .component_data(components::TRANSFORM)
-            .cloned()
-            .unwrap_or(json!({}));
-        let kind = geom.get("kind").and_then(|k| k.as_str()).unwrap_or("");
-        let scale = vec3(&xf["scale"], [1.0, 1.0, 1.0]);
-        let dims = size_dims(&geom["size"], scale);
-        let (volume, area) = measure(kind, dims);
+        use worldos_kernel::measure as m;
+        let kind = m::object_kind(obj).unwrap_or("").to_string();
+        let dims = m::object_dims(obj).unwrap_or([1.0, 1.0, 1.0]);
+        let (volume, area) = m::measure_primitive(&kind, dims);
+        let (bmin, bmax) = m::object_bbox(obj).unwrap_or(([0.0; 3], [0.0; 3]));
         Ok(json!({
             "id": oid.to_string(),
             "kind": kind,
             "dimensions": dims,
-            "bbox": {"min": bbox_min(&xf, dims), "max": bbox_max(&xf, dims)},
+            "bbox": {"min": bmin, "max": bmax},
             "volume": volume,
             "surface_area": area,
         }))
     }
-}
-
-fn vec3(v: &Value, default: [f64; 3]) -> [f64; 3] {
-    let g = |i: usize| v.get(i).and_then(|x| x.as_f64());
-    [
-        g(0).unwrap_or(default[0]),
-        g(1).unwrap_or(default[1]),
-        g(2).unwrap_or(default[2]),
-    ]
-}
-
-/// Interpret `size` (scalar or vec) × scale as [x,y,z] dims.
-fn size_dims(size: &Value, scale: [f64; 3]) -> [f64; 3] {
-    match size {
-        Value::Number(n) => {
-            let s = n.as_f64().unwrap_or(1.0);
-            [s * scale[0], s * scale[1], s * scale[2]]
-        }
-        Value::Array(_) => {
-            let v = vec3(size, [1.0, 1.0, 1.0]);
-            [v[0] * scale[0], v[1] * scale[1], v[2] * scale[2]]
-        }
-        _ => [scale[0], scale[1], scale[2]],
-    }
-}
-
-fn measure(kind: &str, d: [f64; 3]) -> (f64, f64) {
-    match kind {
-        "sphere" => {
-            let r = d[0] / 2.0;
-            (
-                4.0 / 3.0 * std::f64::consts::PI * r.powi(3),
-                4.0 * std::f64::consts::PI * r * r,
-            )
-        }
-        "cylinder" => {
-            let r = d[0] / 2.0;
-            let h = d[2];
-            (
-                std::f64::consts::PI * r * r * h,
-                2.0 * std::f64::consts::PI * r * (r + h),
-            )
-        }
-        "plane" => (0.0, d[0] * d[1]),
-        _ => (
-            d[0] * d[1] * d[2],
-            2.0 * (d[0] * d[1] + d[1] * d[2] + d[0] * d[2]),
-        ),
-    }
-}
-
-fn bbox_min(xf: &Value, d: [f64; 3]) -> [f64; 3] {
-    let p = vec3(&xf["position"], [0.0, 0.0, 0.0]);
-    [p[0] - d[0] / 2.0, p[1] - d[1] / 2.0, p[2] - d[2] / 2.0]
-}
-fn bbox_max(xf: &Value, d: [f64; 3]) -> [f64; 3] {
-    let p = vec3(&xf["position"], [0.0, 0.0, 0.0]);
-    [p[0] + d[0] / 2.0, p[1] + d[1] / 2.0, p[2] + d[2] / 2.0]
 }
 
 /// All builtin capabilities.

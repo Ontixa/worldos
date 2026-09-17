@@ -4,6 +4,8 @@
 //! same engine path a human uses, attributed to `agent:<name>` and fully
 //! undoable as a single transaction.
 
+#[cfg(feature = "llm")]
+use crate::planner::FallbackPlanner;
 use crate::planner::{PlanError, PlannedStep, Planner, RulePlanner};
 use crate::report::{AgentReport, RunStatus, StepRecord};
 use serde_json::Value;
@@ -35,6 +37,31 @@ impl Default for AgentRuntime {
             planner: Box::new(RulePlanner),
             budget: Budget::default(),
         }
+    }
+}
+
+impl AgentRuntime {
+    /// Planner chosen from env: `WORLDOS_LLM_KIND=openai-compatible`
+    /// (feature `llm`) → LLM planner with the rule planner as fallback.
+    /// Anything else / missing feature → rules only. Never panics on a
+    /// half-configured provider — it just falls back.
+    pub fn from_env() -> Self {
+        #[cfg(feature = "llm")]
+        {
+            let cfg = crate::provider::ProviderConfig::default();
+            if cfg.kind == "openai-compatible"
+                && let Ok(p) = crate::provider::OpenAiCompatible::from_env()
+            {
+                return Self {
+                    planner: Box::new(FallbackPlanner::new(vec![
+                        Box::new(crate::planner::LlmPlanner::new(p)),
+                        Box::new(RulePlanner),
+                    ])),
+                    budget: Budget::default(),
+                };
+            }
+        }
+        Self::default()
     }
 }
 

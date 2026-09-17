@@ -2,7 +2,7 @@
 
 use crate::{Cmd, PluginCmd, out};
 use serde_json::{Value, json};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use worldos_agent::AgentRun;
 use worldos_engine::{Engine, diff_projects};
@@ -289,16 +289,64 @@ pub fn run(cmd: Cmd, json_out: bool) -> Result<(), Box<dyn std::error::Error>> {
         }
         Cmd::Doctor => doctor(json_out)?,
         Cmd::Plugin {
-            sub: PluginCmd::List,
+            sub: PluginCmd::List { file },
         } => {
+            let proj_dir = file.as_deref().and_then(|f| f.parent());
+            let dirs = worldos_capability::plugin::plugin_dirs(proj_dir);
+            let mut found: Vec<(String, PathBuf)> = Vec::new();
+            for d in &dirs {
+                for (name, path) in worldos_capability::plugin::discover(d) {
+                    if !found.iter().any(|(n, _)| *n == name) {
+                        found.push((name, path));
+                    }
+                }
+            }
+            let list: Vec<Value> = found
+                .iter()
+                .map(|(n, p)| json!({"name": n, "path": p.display().to_string()}))
+                .collect();
             print(
                 json_out,
-                &json!({"plugins": [], "note": "plugin loader lands with Forge"}),
-                |_| {
-                    println!("no external plugins loaded (builtin domains only)");
+                &json!({"plugins": list, "dirs": dirs.iter().map(|d| d.display().to_string()).collect::<Vec<_>>()}),
+                |v| {
+                    let plugins = v["plugins"].as_array().unwrap();
+                    if plugins.is_empty() {
+                        println!(
+                            "no plugins found — drop `worldos-plugin-*` executables in ./plugins or ~/.worldos/plugins"
+                        );
+                    }
+                    for p in plugins {
+                        println!(
+                            "  {:<20} {}",
+                            p["name"].as_str().unwrap(),
+                            p["path"].as_str().unwrap()
+                        );
+                    }
                 },
             );
         }
+        Cmd::Plugin {
+            sub: PluginCmd::Run { file, plugin, args },
+        } => {
+            let mut e = open(&file)?;
+            let out = e.run_capability("plugin.run", json!({"plugin": plugin, "args": args}))?;
+            if out["committed"].as_bool().unwrap_or(false) {
+                e.save()?;
+            }
+            print(json_out, &out, |o| {
+                println!(
+                    "plugin `{}`: {} request(s), {}",
+                    o["plugin"].as_str().unwrap(),
+                    o["requests"],
+                    if o["committed"].as_bool().unwrap_or(false) {
+                        "committed"
+                    } else {
+                        "rolled back"
+                    }
+                );
+            });
+        }
+        Cmd::PluginShim { fail } => plugin_shim(fail)?,
         Cmd::Version => println!("worldos {}", env!("CARGO_PKG_VERSION")),
     }
     Ok(())
@@ -313,6 +361,7 @@ fn open(file: &Path) -> Result<Engine, Box<dyn std::error::Error>> {
 /// Capabilities layered on the engine by this interface.
 fn register_extras(e: &mut Engine) {
     e.register_capability(Arc::new(AgentRun));
+    e.register_capability(Arc::new(worldos_capability::plugin::PluginRun));
 }
 
 fn resolve(e: &Engine, key: &str) -> Option<worldos_kernel::ObjectId> {
@@ -391,6 +440,45 @@ fn doctor(json_out: bool) -> Result<(), Box<dyn std::error::Error>> {
             );
         }
     });
+    Ok(())
+}
+
+/// Reference plugin client: writes JSON-RPC requests to stdout, reads
+/// responses from stdin — exactly what a `worldos-plugin-*` executable does.
+/// Creates a `plugin-was-here` note; with --fail exits non-zero mid-session
+/// so the host must roll back.
+fn plugin_shim(fail: bool) -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::{BufRead, Write};
+    let mut stdin = std::io::stdin().lock();
+    let mut stdout = std::io::stdout().lock();
+    let mut id = 0u64;
+    let mut send = |method: &str, params: Value| -> std::io::Result<Value> {
+        id += 1;
+        writeln!(
+            stdout,
+            "{}",
+            json!({"id": id, "method": method, "params": params})
+        )?;
+        stdout.flush()?;
+        let mut line = String::new();
+        stdin.read_line(&mut line)?;
+        let v: Value = serde_json::from_str(&line)?;
+        Ok(v)
+    };
+    send("project.info", json!({}))?;
+    let r = send(
+        "command.execute",
+        json!({"type": "object.create", "input": {"type": "core:note", "name": "plugin-was-here"}}),
+    )?;
+    if fail {
+        // mid-session crash: the note above must NOT commit
+        std::process::exit(3);
+    }
+    send("session.end", json!({}))?;
+    if r["error"].is_object() {
+        eprintln!("shim: command failed: {}", r["error"]);
+        std::process::exit(4);
+    }
     Ok(())
 }
 

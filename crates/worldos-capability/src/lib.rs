@@ -10,6 +10,7 @@ pub mod builtin;
 pub mod descriptor;
 pub mod error;
 pub mod host;
+pub mod plugin;
 pub mod registry;
 
 pub use descriptor::{CapabilityDescriptor, Determinism, ExecutionMode, ProviderInfo};

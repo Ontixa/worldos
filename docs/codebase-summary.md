@@ -12,7 +12,12 @@ The domain-free semantic core.
 - `project.rs` — `Project` graph + name/type indexes
 - `known.rs` — builtin type/component/relation constants
 - `schema.rs` — minimal JSON-schema validator for component/command input
-- `requirement.rs` — requirement expression evaluation
+- `requirement.rs` — requirement expression evaluation: `and`/`or`/`not`/
+  parens grammar, `exists*`/`count`/`object()`/`volume`/`area`/`distance`
+  terms, dependency tracing (returns referenced objects)
+- `measure.rs` — analytic geometry measures (dims, bbox, volume, area,
+  distance) shared by the `geometry.measure` capability and requirement
+  terms
 - `validation.rs` — `Validator` trait, `ValidationReport`, diagnostics
 - `search.rs` — `SearchQuery` (text/type/tag/component)
 - `events.rs` — `EngineEvent` (object/txn/project signals)
@@ -40,8 +45,11 @@ The domain-free semantic core.
 - `descriptor.rs` — `CapabilityDescriptor` (permissions, determinism…)
 - `registry.rs` — registration + permission-checked dispatch
 - `host.rs` — `CapabilityHost` bridge (run commands, txn control,
-  schemas, validation, object resolution)
-- `builtin.rs` — inspect/search/graph/list capabilities
+  schemas, validation, object resolution, project path)
+- `builtin.rs` — inspect/search/validate/export/measure capabilities
+- `plugin.rs` — hosted plugin runtime: `worldos-plugin-*` subprocesses
+  speaking line-delimited JSON-RPC over stdio; `plugin.run` capability,
+  discovery, interpreter dispatch, timeout, commit/rollback
 
 ## crates/worldos-engine
 
@@ -52,10 +60,13 @@ The domain-free semantic core.
 
 ## crates/worldos-agent
 
-- `planner.rs` — rule-based `Planner` → `Vec<PlannedStep>`
+- `planner/` — `Planner` trait + `PlannedStep`; `rules.rs` (deterministic
+  offline planner), `llm.rs` (`LlmPlanner` over `ModelProvider` with
+  self-repair reprompt + `FallbackPlanner` chain)
 - `runtime.rs` — plan→act→verify loop in one transaction
 - `capability.rs` — `AgentRun` capability (`agent.run`)
-- `provider.rs` — `ModelProvider` trait + `EchoProvider` (BYOK seam)
+- `provider.rs` — `ModelProvider` trait, `EchoProvider`,
+  `OpenAiCompatible` (feature `llm`, env-configured BYOK)
 - `report.rs` — `AgentReport`, step records
 
 ## crates/worldos-rpc

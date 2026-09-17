@@ -100,3 +100,62 @@ fn history_and_validate_subcommands() {
         .assert()
         .success();
 }
+
+/// Full plugin e2e: the `worldos` binary itself acts as the plugin via the
+/// hidden `plugin-shim` subcommand — a real subprocess speaking the hosted
+/// plugin protocol.
+#[test]
+fn plugin_run_commits_and_rollback_on_crash() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = proj(&dir);
+    worldos()
+        .args(["new", "t", "--path", &f])
+        .assert()
+        .success();
+
+    // resolve our own binary to act as the plugin process
+    let exe = std::env::var("CARGO_BIN_EXE_worldos").unwrap_or_else(|_| {
+        assert_cmd::cargo::cargo_bin("worldos")
+            .display()
+            .to_string()
+    });
+
+    let out = worldos()
+        .args(["--json", "plugin", "run", &f, &exe, "plugin-shim"])
+        .assert()
+        .success();
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(v["committed"], true, "{v}");
+
+    let out = worldos().args(["inspect", &f, "--json"]).assert().success();
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(v["object_count"], 1, "plugin note persisted");
+
+    // plugin crash → transaction rolls back, nothing persists
+    let f2 = dir.path().join("t2.worldos").display().to_string();
+    worldos()
+        .args(["new", "t", "--path", &f2])
+        .assert()
+        .success();
+    let out = worldos()
+        .args([
+            "--json",
+            "plugin",
+            "run",
+            &f2,
+            &exe,
+            "plugin-shim",
+            "--fail",
+        ])
+        .assert()
+        .success();
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(v["committed"], false, "{v}");
+
+    let out = worldos()
+        .args(["inspect", &f2, "--json"])
+        .assert()
+        .success();
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(v["object_count"], 0, "crashed plugin left no objects");
+}

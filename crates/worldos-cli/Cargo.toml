@@ -14,7 +14,7 @@ worldos-kernel = { path = "../worldos-kernel" }
 worldos-commands = { path = "../worldos-commands" }
 worldos-engine = { path = "../worldos-engine" }
 worldos-store = { path = "../worldos-store" }
-worldos-agent = { path = "../worldos-agent" }
+worldos-agent = { path = "../worldos-agent", features = ["llm"] }
 worldos-rpc = { path = "../worldos-rpc" }
 worldos-capability = { path = "../worldos-capability" }
 serde.workspace = true

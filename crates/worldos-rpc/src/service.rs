@@ -14,9 +14,10 @@ pub struct RpcService {
 
 impl RpcService {
     pub fn new(mut engine: Engine) -> Self {
-        // interfaces share one engine; agent.run is registered here so RPC
-        // clients (MCP, SDK, CLI) all reach the same agent capability
+        // interfaces share one engine; agent.run + plugin.run are
+        // registered here so RPC clients (MCP, SDK, CLI) all reach them
         engine.register_capability(std::sync::Arc::new(worldos_agent::AgentRun));
+        engine.register_capability(std::sync::Arc::new(worldos_capability::plugin::PluginRun));
         Self {
             engine: Mutex::new(engine),
         }

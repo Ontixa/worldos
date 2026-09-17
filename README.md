@@ -47,6 +47,12 @@ worldos validate my.worldos
 Serve a project to SDKs: `worldos serve my.worldos --port 7799`
 MCP for AI tools: `worldos mcp my.worldos`
 Desktop app: `cd apps/desktop && npm run tauri dev`
+Plugins: `worldos plugin list` / `worldos plugin run my.worldos stamp`
+(see `examples/plugins/`)
+
+LLM planner (BYOK, optional): set `WORLDOS_LLM_KIND=openai-compatible`,
+`WORLDOS_LLM_BASE_URL`, `WORLDOS_LLM_MODEL`, `OPENAI_API_KEY` — falls back
+to the rule planner automatically.
 
 See `worldos commands my.worldos` for the live command catalog and
 `worldos capabilities my.worldos` for capabilities.
@@ -58,7 +64,7 @@ See `worldos commands my.worldos` for the live command catalog and
 | `crates/worldos-kernel` | UPG model, objects/components/relations, actors, requirements, deltas |
 | `crates/worldos-commands` | command envelopes, schemas, transactions, history, builtin commands |
 | `crates/worldos-store` | `ProjectStore` + SQLite `.worldos` persistence, migrations |
-| `crates/worldos-capability` | capability registry, permission guard, `CapabilityHost` |
+| `crates/worldos-capability` | capability registry, permission guard, `CapabilityHost`, hosted plugin runtime |
 | `crates/worldos-engine` | the facade every interface drives |
 | `crates/worldos-agent` | plan-act-verify agent runtime, model-provider abstraction |
 | `crates/worldos-rpc` | JSON-RPC service, stdio/WS transports, MCP server |
@@ -67,13 +73,16 @@ See `worldos commands my.worldos` for the live command catalog and
 | `packages/sdk-typescript` | WebSocket JSON-RPC SDK |
 | `sdks/worldos-py` | stdlib-only Python SDK |
 | `examples/genesis` | a real generated project |
+| `examples/plugins` | hosted-plugin protocol + reference plugins |
 | `docs/` + `docs/adr/` | architecture docs and decision records |
 
 ## Status
 
-Genesis milestone implemented and tested (see `ROADMAP.md`).
-Forge (CAD/BIM/EDA/simulation/manufacturing lenses) is next; the kernel
-is domain-agnostic by design so these arrive as commands + components,
-not rewrites.
+Genesis milestone implemented and tested (see `ROADMAP.md`). Forge is
+underway: requirement expressions with `and`/`or`/`not` + measure terms
+and `depends-on` tracing, a hosted plugin runtime (`worldos-plugin-*`
+subprocesses, one attributed transaction per session), and an LLM planner
+with rule fallback. The kernel stays domain-agnostic — domain lenses
+arrive as commands + components, not rewrites.
 
 License: MPL-2.0 (see `LICENSE`).

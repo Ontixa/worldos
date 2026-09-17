@@ -81,12 +81,12 @@ impl CommandHandler for RequirementEvaluate {
         };
         let mut results = Vec::new();
         for id in targets {
-            let (status, verdict) = {
+            let ((status, verdict), refs) = {
                 let req = ctx
                     .project
                     .get(id)
                     .ok_or_else(|| CommandError::Failed(format!("object {id} not found")))?;
-                worldos_kernel::requirement::evaluate(ctx.project, req)
+                worldos_kernel::requirement::evaluate_traced(ctx.project, req)
             };
             let status_str = serde_json::to_value(status)?.as_str().unwrap().to_string();
             ctx.update_object(id, |o| {
@@ -95,10 +95,53 @@ impl CommandHandler for RequirementEvaluate {
                     json!({"status": status_str, "verdict": verdict}),
                 ));
             })?;
-            results.push(json!({"id": id.to_string(), "status": status_str, "verdict": verdict}));
+            sync_dep_edges(ctx, id, &refs)?;
+            results.push(json!({
+                "id": id.to_string(), "status": status_str, "verdict": verdict,
+                "depends_on": refs.iter().map(|r| r.to_string()).collect::<Vec<_>>(),
+            }));
         }
         Ok(json!({"results": results}))
     }
+}
+
+/// Reconcile `core:depends-on` edges req→refs: remove stale ones, add
+/// missing ones. Keeps the graph an accurate dependency trace of what
+/// each requirement reads.
+fn sync_dep_edges(
+    ctx: &mut CommandContext,
+    req: worldos_kernel::ObjectId,
+    refs: &[worldos_kernel::ObjectId],
+) -> Result<(), CommandError> {
+    let want: std::collections::BTreeSet<worldos_kernel::ObjectId> = refs.iter().copied().collect();
+    let existing: Vec<worldos_kernel::model::Relation> = ctx
+        .project
+        .relations_from(req)
+        .filter(|r| r.type_id == rel::DEPENDS_ON)
+        .cloned()
+        .collect();
+    for r in existing {
+        if !want.contains(&r.to) {
+            ctx.remove_relation(r.id)?;
+        }
+    }
+    let have: std::collections::BTreeSet<worldos_kernel::ObjectId> = ctx
+        .project
+        .relations_from(req)
+        .filter(|r| r.type_id == rel::DEPENDS_ON)
+        .map(|r| r.to)
+        .collect();
+    for to in want {
+        if !have.contains(&to) && ctx.project.get(to).is_some() {
+            ctx.put_relation(worldos_kernel::model::Relation::new(
+                rel::DEPENDS_ON,
+                req,
+                to,
+                &ctx.actor.id,
+            ))?;
+        }
+    }
+    Ok(())
 }
 
 pub struct DecisionRecord;

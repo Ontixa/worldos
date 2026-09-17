@@ -88,10 +88,19 @@ enum Cmd {
     },
     /// Environment diagnostics.
     Doctor,
-    /// List registered plugins (builtin only for now).
+    /// List discovered plugins, or run one inside a project session.
     Plugin {
         #[command(subcommand)]
         sub: PluginCmd,
+    },
+    /// Reference plugin: speaks the JSON-RPC plugin protocol on stdio.
+    /// Used by tests and as a documented example for plugin authors —
+    /// `worldos plugin run <file> -- <path-to-worldos> plugin-shim`.
+    #[command(hide = true)]
+    PluginShim {
+        /// Exit non-zero mid-session to exercise rollback.
+        #[arg(long)]
+        fail: bool,
     },
     /// Print version.
     Version,
@@ -99,7 +108,22 @@ enum Cmd {
 
 #[derive(Subcommand)]
 enum PluginCmd {
-    List,
+    /// Discover `worldos-plugin-*` executables in plugin dirs.
+    List {
+        /// Project file — its sibling `plugins/` dir is searched too.
+        file: Option<PathBuf>,
+    },
+    /// Run a plugin: subprocess gets a JSON-RPC channel into the project;
+    /// all its commands commit as one `plugin:<name>` transaction.
+    Run {
+        /// Project file to open.
+        file: PathBuf,
+        /// Plugin name (`foo` → `worldos-plugin-foo`) or path.
+        plugin: String,
+        /// Arguments passed to the plugin.
+        #[arg(trailing_var_arg = true)]
+        args: Vec<String>,
+    },
 }
 
 fn main() {

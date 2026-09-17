@@ -54,6 +54,11 @@ fn tools() -> Vec<Value> {
                "inputSchema": obj(&[], json!({}))}),
         json!({"name": "agent_run", "description": "Run the builtin agent on a goal",
                "inputSchema": obj(&["goal"], json!({"goal": {"type":"string"}, "agent": {"type":"string"}}))}),
+        json!({"name": "geometry_measure", "description": "Bounding box, volume, surface area of an object",
+               "inputSchema": obj(&[], json!({"id": {"type":"string"}, "name": {"type":"string"}}))}),
+        json!({"name": "plugin_run", "description": "Run a hosted worldos-plugin-* executable in one transaction",
+               "inputSchema": obj(&["plugin"], json!({"plugin": {"type":"string"},
+                    "args": {"type":"array", "items": {"type":"string"}}}))}),
         json!({"name": "project_save", "description": "Persist the project",
                "inputSchema": obj(&[], json!({}))}),
     ]
@@ -90,6 +95,14 @@ fn tool_call(service: &RpcService, name: &str, args: &Value) -> Result<Value, St
         "history_redo" => ("history.redo", json!({})),
         "validation_run" => ("validation.run", json!({})),
         "agent_run" => ("agent.run", args.clone()),
+        "geometry_measure" => (
+            "capability.execute",
+            json!({"id": "geometry.measure", "input": args}),
+        ),
+        "plugin_run" => (
+            "capability.execute",
+            json!({"id": "plugin.run", "input": args}),
+        ),
         "project_save" => ("project.save", json!({})),
         _ => return Err(format!("unknown tool `{name}`")),
     };

@@ -1,41 +1,9 @@
-//! Planners turn a goal + world snapshot into concrete command steps.
-//!
-//! `RulePlanner` is the deterministic builtin: it parses common
-//! engineering-goal phrasings without any LLM, so Genesis works fully
-//! offline. `LlmPlanner` (feature `llm`) asks a model provider for a
-//! JSON plan validated against the live command schemas — plan, act,
-//! verify — never freeform mutation.
+//! `RulePlanner`: deterministic, offline planner for common goal phrasings.
 
-use crate::report::StepRecord;
-use serde_json::{Value, json};
+use super::{PlanError, PlannedStep, Planner, SUPPORTED};
+use serde_json::json;
 use worldos_capability::CapabilityHost;
-use worldos_kernel::known::{components, types};
-
-/// A single planned command invocation. `input` may contain
-/// `"$stepN.path"` references resolved from earlier step outputs.
-#[derive(Debug, Clone)]
-pub struct PlannedStep {
-    pub command: String,
-    pub input: Value,
-    pub note: String,
-}
-
-pub trait Planner: Send + Sync {
-    fn plan(&self, goal: &str, host: &dyn CapabilityHost) -> Result<Vec<PlannedStep>, PlanError>;
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum PlanError {
-    #[error("unsupported goal: {0}. Understood patterns: {1}")]
-    Unsupported(String, String),
-    #[error("cannot plan: {0}")]
-    Failed(String),
-}
-
-const SUPPORTED: &str = "create <cube|sphere|cylinder|plane|note|code file> [named X] [next to Y]; \
-    rename X to Y; move X to [x,y,z]; delete X; evaluate requirements; list/inspect project";
-
-// ------------------------------------------------------------------ rules
+use worldos_kernel::known::types;
 
 pub struct RulePlanner;
 
@@ -131,39 +99,16 @@ fn resolve_anchor(host: &dyn CapabilityHost, anchor: &str) -> Option<worldos_ker
 
 /// Width (x-dimension) of an object for "next to" placement.
 fn object_width(host: &dyn CapabilityHost, id: worldos_kernel::ObjectId) -> f64 {
-    let Some(obj) = host.project().get(id) else {
-        return 1.0;
-    };
-    let geom = obj.component_data(components::GEOMETRY);
-    let xf = obj.component_data(components::TRANSFORM);
-    let sx = xf
-        .and_then(|t| t.get("scale"))
-        .and_then(|s| s.get(0))
-        .and_then(|v| v.as_f64())
-        .unwrap_or(1.0);
-    let base = geom
-        .and_then(|g| g.get("size"))
-        .map(|s| match s {
-            Value::Number(n) => n.as_f64().unwrap_or(1.0),
-            Value::Array(a) => a.first().and_then(|v| v.as_f64()).unwrap_or(1.0),
-            _ => 1.0,
-        })
-        .unwrap_or(1.0);
-    base * sx
+    host.project()
+        .get(id)
+        .and_then(|o| worldos_kernel::measure::object_dims(o).map(|d| d[0]))
+        .unwrap_or(1.0)
 }
 
 fn object_position(host: &dyn CapabilityHost, id: worldos_kernel::ObjectId) -> [f64; 3] {
     host.project()
         .get(id)
-        .and_then(|o| o.component_data(components::TRANSFORM))
-        .and_then(|t| t.get("position"))
-        .map(|p| {
-            [
-                p.get(0).and_then(|v| v.as_f64()).unwrap_or(0.0),
-                p.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0),
-                p.get(2).and_then(|v| v.as_f64()).unwrap_or(0.0),
-            ]
-        })
+        .map(worldos_kernel::measure::object_position)
         .unwrap_or([0.0, 0.0, 0.0])
 }
 
@@ -315,86 +260,4 @@ fn try_delete(
         input: json!({"name": name, "cascade": true}),
         note: format!("delete {name}"),
     }]))
-}
-
-// ------------------------------------------------------------------ llm
-
-/// LLM-backed planner: asks the provider for a JSON array of
-/// `[{"command": ..., "input": {...}, "note": ...}]` and validates each
-/// against the registered command schemas. Only available with `--features llm`.
-pub struct LlmPlanner<P: crate::provider::ModelProvider> {
-    pub provider: P,
-}
-
-impl<P: crate::provider::ModelProvider> Planner for LlmPlanner<P> {
-    fn plan(&self, goal: &str, host: &dyn CapabilityHost) -> Result<Vec<PlannedStep>, PlanError> {
-        let schema_list: Vec<Value> = host
-            .command_schemas()
-            .iter()
-            .map(|s| {
-                json!({
-                    "command": s.command_type,
-                    "description": s.description,
-                    "input_schema": s.input_schema,
-                })
-            })
-            .collect();
-        let objects: Vec<Value> = host
-            .project()
-            .sorted_objects()
-            .iter()
-            .map(|o| json!({"id": o.id.to_string(), "name": o.name, "type": o.type_id}))
-            .collect();
-        let prompt = format!(
-            "You are a WorldOS agent. Produce a JSON array of steps to achieve the goal.\n\
-             Each step: {{\"command\": <command>, \"input\": <object>, \"note\": <short>}}.\n\
-             Refer to earlier outputs as \"$<index>.<field>\".\n\
-             Available commands:\n{}\n\nCurrent objects:\n{}\n\nGoal: {goal}\n\
-             Respond with JSON array only.",
-            serde_json::to_string_pretty(&schema_list).unwrap_or_default(),
-            serde_json::to_string_pretty(&objects).unwrap_or_default(),
-        );
-        let text = self
-            .provider
-            .complete(&prompt)
-            .map_err(|e| PlanError::Failed(e.to_string()))?;
-        parse_llm_steps(&text)
-    }
-}
-
-pub fn parse_llm_steps(text: &str) -> Result<Vec<PlannedStep>, PlanError> {
-    // tolerate ```json fences
-    let t = text.trim();
-    let t = t
-        .strip_prefix("```json")
-        .or_else(|| t.strip_prefix("```"))
-        .unwrap_or(t);
-    let t = t.strip_suffix("```").unwrap_or(t).trim();
-    let arr: Vec<Value> =
-        serde_json::from_str(t).map_err(|e| PlanError::Failed(format!("bad plan JSON: {e}")))?;
-    arr.iter()
-        .enumerate()
-        .map(|(i, s)| {
-            Ok(PlannedStep {
-                command: s["command"]
-                    .as_str()
-                    .ok_or_else(|| PlanError::Failed(format!("step {i}: missing command")))?
-                    .to_string(),
-                input: s.get("input").cloned().unwrap_or(json!({})),
-                note: s
-                    .get("note")
-                    .and_then(|n| n.as_str())
-                    .unwrap_or("")
-                    .to_string(),
-            })
-        })
-        .collect()
-}
-
-/// Convert an executed step list into report records.
-pub fn to_records(steps: &[StepRecord]) -> Vec<String> {
-    steps
-        .iter()
-        .map(|s| format!("{}: {} ({})", s.index, s.command, s.note))
-        .collect()
 }

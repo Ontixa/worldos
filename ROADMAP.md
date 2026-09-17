@@ -18,20 +18,27 @@ The governed core plus narrow-but-real functionality:
   history, command palette, agent panel)
 - Acceptance: `cargo test -p worldos-engine` (genesis.rs) + manual E2E
 
-## Forge — next
+## Forge — in progress
 
 Domain lenses on the same kernel. Ordered by leverage:
 
-1. **Geometry depth** — parametric sketches/constraints, B-rep boundary
-   (OCCT eval), mesh import/export, measurement queries as capabilities
-2. **Real agent intelligence** — LLM planner over `ModelProvider`
-   (OpenAI/Anthropic/local), tool-use loop, planner self-repair,
-   multi-agent actors with distinct permissions
-3. **Richer requirements** — expression language over component fields
-   (`housing.volume >= x`), dependency tracing via relations
+1. **Geometry depth** — ✅ `geometry.measure` capability (bbox, volume,
+   surface area) + `volume()`/`area()`/`distance()` requirement terms over
+   shared `kernel::measure`. Next: parametric sketches/constraints,
+   B-rep boundary (OCCT eval), mesh import/export
+2. **Real agent intelligence** — ✅ `LlmPlanner` over `ModelProvider`
+   (OpenAI-compatible BYOK via `WORLDOS_LLM_*`), self-repair reprompt,
+   `FallbackPlanner` chain to rules, unknown-command validation.
+   Next: tool-use loop, richer multi-agent permission profiles
+3. **Richer requirements** — ✅ `and`/`or`/`not`/parens grammar, measure
+   terms, `depends-on` tracing written by `requirement.evaluate`
 4. **Collaboration** — actor sessions, shared projects, op-based sync
-5. **Plugin runtime** — WASM/hosted capabilities with declared
-   permissions; external tool adapters (Blender, KiCad…) speaking RPC
+5. **Plugin runtime** — ✅ hosted `worldos-plugin-*` executables speaking
+   line-delimited JSON-RPC over stdio; one `plugin:<name>` transaction per
+   session, committed on clean exit / rolled back on crash or timeout;
+   discovery via `plugins/` dirs + PATH; `plugin.run` capability + MCP
+   tool; Python + Rust reference plugins. Next: WASM sandbox, manifest
+   permission declarations, external tool adapters (Blender, KiCad…)
 6. **Desktop depth** — proper GL viewport (wgpu), timeline/scrub of
    history, diff view, multi-window lenses
 7. **BIM/EDA/simulation lenses** — domain component packs + validators,

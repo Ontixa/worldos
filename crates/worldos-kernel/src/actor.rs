@@ -113,4 +113,16 @@ impl Actor {
             permissions: PermissionSet::agent_default(),
         }
     }
+    /// Hosted plugin: same project access as an agent, tagged `plugin:`.
+    /// Tighter grants come from the plugin manifest when signed
+    /// permissions land; for now plugins are trusted local code.
+    pub fn plugin(name: impl Into<String>) -> Self {
+        let name = name.into();
+        Self {
+            id: ActorId::new(format!("plugin:{name}")),
+            kind: ActorKind::Plugin,
+            name,
+            permissions: PermissionSet::agent_default(),
+        }
+    }
 }
