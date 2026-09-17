@@ -1,7 +1,7 @@
 //! Newline-delimited JSON-RPC over stdio. Used by `worldos rpc` — the
 //! raw endpoint SDKs/subprocesses speak — and shared parsing with MCP.
 
-use crate::proto::{RpcRequest, RpcResponse, PARSE_ERROR};
+use crate::proto::{PARSE_ERROR, RpcRequest, RpcResponse};
 use crate::service::RpcService;
 use std::io::{BufRead, BufReader, Write};
 

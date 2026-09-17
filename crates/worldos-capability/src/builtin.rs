@@ -4,7 +4,7 @@ use crate::descriptor::CapabilityDescriptor;
 use crate::error::CapabilityError;
 use crate::host::CapabilityHost;
 use crate::registry::Capability;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use worldos_kernel::known::{components, permissions};
 
 fn fail(e: impl std::fmt::Display) -> CapabilityError {
@@ -29,8 +29,13 @@ impl Capability for ProjectInspect {
         let p = host.project();
         let mut types = serde_json::Map::new();
         for o in p.objects.values() {
-            *types.entry(o.type_id.0.clone()).or_insert(json!(0)) =
-                json!(types.get(&o.type_id.0).and_then(|v| v.as_i64()).unwrap_or(0) + 1);
+            *types.entry(o.type_id.0.clone()).or_insert(json!(0)) = json!(
+                types
+                    .get(&o.type_id.0)
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0)
+                    + 1
+            );
         }
         Ok(json!({
             "id": p.id.to_string(),
@@ -65,9 +70,12 @@ impl Capability for ProjectSearch {
         .requires(&[permissions::PROJECT_SEARCH])
         .deterministic()
     }
-    fn execute(&self, host: &mut dyn CapabilityHost, input: &Value) -> Result<Value, CapabilityError> {
-        let q: worldos_kernel::SearchQuery =
-            serde_json::from_value(input.clone()).map_err(fail)?;
+    fn execute(
+        &self,
+        host: &mut dyn CapabilityHost,
+        input: &Value,
+    ) -> Result<Value, CapabilityError> {
+        let q: worldos_kernel::SearchQuery = serde_json::from_value(input.clone()).map_err(fail)?;
         let results: Vec<Value> = worldos_kernel::search(host.project(), &q)
             .into_iter()
             .map(|o| {
@@ -96,7 +104,7 @@ impl Capability for ValidationRun {
         .deterministic()
     }
     fn execute(&self, host: &mut dyn CapabilityHost, _i: &Value) -> Result<Value, CapabilityError> {
-        Ok(serde_json::to_value(host.validate()?).map_err(fail)?)
+        serde_json::to_value(host.validate()?).map_err(fail)
     }
 }
 
@@ -117,7 +125,11 @@ impl Capability for ArtifactExport {
         )
         .requires(&[permissions::ARTIFACT_EXPORT, permissions::FILESYSTEM_WRITE])
     }
-    fn execute(&self, host: &mut dyn CapabilityHost, input: &Value) -> Result<Value, CapabilityError> {
+    fn execute(
+        &self,
+        host: &mut dyn CapabilityHost,
+        input: &Value,
+    ) -> Result<Value, CapabilityError> {
         let path = input["path"].as_str().ok_or_else(|| fail("missing path"))?;
         // Path traversal guard: refuse absolute escapes and `..` segments
         // when a sandbox root is configured later; for now require the
@@ -148,7 +160,11 @@ impl Capability for GeometryMeasure {
         .requires(&[permissions::PROJECT_READ])
         .deterministic()
     }
-    fn execute(&self, host: &mut dyn CapabilityHost, input: &Value) -> Result<Value, CapabilityError> {
+    fn execute(
+        &self,
+        host: &mut dyn CapabilityHost,
+        input: &Value,
+    ) -> Result<Value, CapabilityError> {
         let key = input
             .get("id")
             .or_else(|| input.get("name"))
@@ -158,8 +174,14 @@ impl Capability for GeometryMeasure {
             .resolve_object(key)
             .ok_or_else(|| fail(format!("object `{key}` not found")))?;
         let obj = host.project().get(oid).ok_or_else(|| fail("gone"))?;
-        let geom = obj.component_data(components::GEOMETRY).cloned().unwrap_or(json!({}));
-        let xf = obj.component_data(components::TRANSFORM).cloned().unwrap_or(json!({}));
+        let geom = obj
+            .component_data(components::GEOMETRY)
+            .cloned()
+            .unwrap_or(json!({}));
+        let xf = obj
+            .component_data(components::TRANSFORM)
+            .cloned()
+            .unwrap_or(json!({}));
         let kind = geom.get("kind").and_then(|k| k.as_str()).unwrap_or("");
         let scale = vec3(&xf["scale"], [1.0, 1.0, 1.0]);
         let dims = size_dims(&geom["size"], scale);
@@ -177,7 +199,11 @@ impl Capability for GeometryMeasure {
 
 fn vec3(v: &Value, default: [f64; 3]) -> [f64; 3] {
     let g = |i: usize| v.get(i).and_then(|x| x.as_f64());
-    [g(0).unwrap_or(default[0]), g(1).unwrap_or(default[1]), g(2).unwrap_or(default[2])]
+    [
+        g(0).unwrap_or(default[0]),
+        g(1).unwrap_or(default[1]),
+        g(2).unwrap_or(default[2]),
+    ]
 }
 
 /// Interpret `size` (scalar or vec) × scale as [x,y,z] dims.
@@ -199,7 +225,10 @@ fn measure(kind: &str, d: [f64; 3]) -> (f64, f64) {
     match kind {
         "sphere" => {
             let r = d[0] / 2.0;
-            (4.0 / 3.0 * std::f64::consts::PI * r.powi(3), 4.0 * std::f64::consts::PI * r * r)
+            (
+                4.0 / 3.0 * std::f64::consts::PI * r.powi(3),
+                4.0 * std::f64::consts::PI * r * r,
+            )
         }
         "cylinder" => {
             let r = d[0] / 2.0;
@@ -210,7 +239,10 @@ fn measure(kind: &str, d: [f64; 3]) -> (f64, f64) {
             )
         }
         "plane" => (0.0, d[0] * d[1]),
-        _ => (d[0] * d[1] * d[2], 2.0 * (d[0] * d[1] + d[1] * d[2] + d[0] * d[2])),
+        _ => (
+            d[0] * d[1] * d[2],
+            2.0 * (d[0] * d[1] + d[1] * d[2] + d[0] * d[2]),
+        ),
     }
 }
 

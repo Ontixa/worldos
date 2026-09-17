@@ -2,8 +2,8 @@
 
 use crate::error::CommandError;
 use crate::handler::{CommandContext, CommandHandler};
-use crate::schema::{props, CommandSchema};
-use serde_json::{json, Value};
+use crate::schema::{CommandSchema, props};
+use serde_json::{Value, json};
 use worldos_kernel::known::{components, types};
 
 pub struct DocumentCreate;
@@ -27,7 +27,10 @@ impl CommandHandler for DocumentCreate {
     }
     fn execute(&self, ctx: &mut CommandContext, input: &Value) -> Result<Value, CommandError> {
         let text = input.get("text").and_then(|t| t.as_str()).unwrap_or("");
-        let format = input.get("format").and_then(|f| f.as_str()).unwrap_or("markdown");
+        let format = input
+            .get("format")
+            .and_then(|f| f.as_str())
+            .unwrap_or("markdown");
         let mut args = json!({
             "type": types::NOTE,
             "name": input["name"],
@@ -50,8 +53,16 @@ fn set_text(ctx: &mut CommandContext, input: &Value, append: bool) -> Result<Val
             .or_insert_with(|| {
                 worldos_kernel::Component::new(components::TEXT, json!({"format": "markdown"}))
             });
-        let cur = entry.data.get("text").and_then(|t| t.as_str()).unwrap_or("");
-        let next = if append { format!("{cur}{text}") } else { text.to_string() };
+        let cur = entry
+            .data
+            .get("text")
+            .and_then(|t| t.as_str())
+            .unwrap_or("");
+        let next = if append {
+            format!("{cur}{text}")
+        } else {
+            text.to_string()
+        };
         entry.data["text"] = json!(next);
     })?;
     Ok(json!({"id": id.to_string()}))

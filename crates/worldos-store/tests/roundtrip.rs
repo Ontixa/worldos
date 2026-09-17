@@ -20,7 +20,9 @@ fn save_and_reopen_preserves_state() {
 
     {
         let mut store = SqliteStore::open(&path).unwrap();
-        store.save(&Snapshot::new(project, Default::default())).unwrap();
+        store
+            .save(&Snapshot::new(project, Default::default()))
+            .unwrap();
     }
     {
         let store = SqliteStore::open(&path).unwrap();

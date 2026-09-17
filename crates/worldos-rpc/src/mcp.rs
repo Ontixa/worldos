@@ -5,18 +5,16 @@
 //! Implements the JSON-RPC 2.0 subset MCP needs: initialize, ping,
 //! tools/list, tools/call, resources/list, resources/read.
 
-use crate::proto::{RpcRequest, RpcResponse, PARSE_ERROR};
+use crate::proto::{PARSE_ERROR, RpcRequest, RpcResponse};
 use crate::service::RpcService;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Write};
 
 const PROTOCOL_VERSION: &str = "2025-06-18";
 
 /// Tool name → (description, inputSchema, rpc method or custom mapping).
 fn tools() -> Vec<Value> {
-    let obj = |req: &[&str], props: Value| {
-        json!({"type": "object", "required": req, "properties": props})
-    };
+    let obj = |req: &[&str], props: Value| json!({"type": "object", "required": req, "properties": props});
     vec![
         json!({"name": "project_inspect", "description": "Project summary: counts, types, undo state",
                "inputSchema": obj(&[], json!({}))}),
@@ -67,12 +65,22 @@ fn tool_call(service: &RpcService, name: &str, args: &Value) -> Result<Value, St
         "project_search" => ("project.search", args.clone()),
         "project_graph" => ("project.graph", json!({})),
         "object_get" => ("object.get", args.clone()),
-        "object_create" => ("command.execute", json!({"type": "object.create", "input": args})),
-        "object_set_property" => {
-            ("command.execute", json!({"type": "object.set_property", "input": args}))
-        }
-        "object_rename" => ("command.execute", json!({"type": "object.rename", "input": args})),
-        "object_delete" => ("command.execute", json!({"type": "object.delete", "input": args})),
+        "object_create" => (
+            "command.execute",
+            json!({"type": "object.create", "input": args}),
+        ),
+        "object_set_property" => (
+            "command.execute",
+            json!({"type": "object.set_property", "input": args}),
+        ),
+        "object_rename" => (
+            "command.execute",
+            json!({"type": "object.rename", "input": args}),
+        ),
+        "object_delete" => (
+            "command.execute",
+            json!({"type": "object.delete", "input": args}),
+        ),
         "command_list" => ("command.list", json!({})),
         "command_execute" => ("command.execute", args.clone()),
         "capability_list" => ("capability.list", json!({})),
@@ -163,22 +171,31 @@ pub fn serve_mcp<R: BufRead, W: Write>(
                     RpcResponse::err(req.id.clone(), -32602, format!("unknown resource {uri}"))
                 } else {
                     let inner = RpcRequest {
-                        jsonrpc: "2.0".into(), id: Some(json!(1)),
-                        method: method.into(), params: json!({}),
+                        jsonrpc: "2.0".into(),
+                        id: Some(json!(1)),
+                        method: method.into(),
+                        params: json!({}),
                     };
                     let r = service.handle(&inner);
                     let text = serde_json::to_string_pretty(&r.result.unwrap_or(Value::Null))
                         .unwrap_or_default();
-                    RpcResponse::ok(req.id.clone(), json!({"contents": [
-                        {"uri": uri, "mimeType": "application/json", "text": text}
-                    ]}))
+                    RpcResponse::ok(
+                        req.id.clone(),
+                        json!({"contents": [
+                            {"uri": uri, "mimeType": "application/json", "text": text}
+                        ]}),
+                    )
                 }
             }
             _ => {
                 if is_notification {
                     continue;
                 }
-                RpcResponse::err(req.id.clone(), -32601, format!("unknown method {}", req.method))
+                RpcResponse::err(
+                    req.id.clone(),
+                    -32601,
+                    format!("unknown method {}", req.method),
+                )
             }
         };
         if !is_notification {

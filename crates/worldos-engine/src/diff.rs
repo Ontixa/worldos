@@ -9,12 +9,38 @@ use worldos_kernel::project::Project;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum DiffEntry {
-    ObjectAdded { id: String, name: String, type_id: String },
-    ObjectRemoved { id: String, name: String, type_id: String },
-    ObjectChanged { id: String, name: String, changes: Vec<FieldChange> },
-    RelationAdded { id: String, type_id: String, from: String, to: String },
-    RelationRemoved { id: String, type_id: String, from: String, to: String },
-    ProjectMetaChanged { key: String, before: Option<Value>, after: Option<Value> },
+    ObjectAdded {
+        id: String,
+        name: String,
+        type_id: String,
+    },
+    ObjectRemoved {
+        id: String,
+        name: String,
+        type_id: String,
+    },
+    ObjectChanged {
+        id: String,
+        name: String,
+        changes: Vec<FieldChange>,
+    },
+    RelationAdded {
+        id: String,
+        type_id: String,
+        from: String,
+        to: String,
+    },
+    RelationRemoved {
+        id: String,
+        type_id: String,
+        from: String,
+        to: String,
+    },
+    ProjectMetaChanged {
+        key: String,
+        before: Option<Value>,
+        after: Option<Value>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -127,7 +153,11 @@ fn object_changes(a: &worldos_kernel::Object, b: &worldos_kernel::Object) -> Vec
     }
     for (k, bv) in &fb {
         if !fa.contains_key(k) {
-            changes.push(FieldChange { path: k.clone(), before: None, after: Some(bv.clone()) });
+            changes.push(FieldChange {
+                path: k.clone(),
+                before: None,
+                after: Some(bv.clone()),
+            });
         }
     }
     changes

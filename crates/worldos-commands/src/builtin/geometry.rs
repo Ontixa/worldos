@@ -6,8 +6,8 @@
 
 use crate::error::CommandError;
 use crate::handler::{CommandContext, CommandHandler};
-use crate::schema::{props, CommandSchema};
-use serde_json::{json, Value};
+use crate::schema::{CommandSchema, props};
+use serde_json::{Value, json};
 use worldos_kernel::known::{components, types};
 
 pub struct GeometryCreatePrimitive;
@@ -123,7 +123,11 @@ impl CommandHandler for GeometryTransform {
                 entry.data["scale"] = s.clone();
             }
         })?;
-        let t = ctx.project.get(id).and_then(|o| o.component_data(components::TRANSFORM)).cloned();
+        let t = ctx
+            .project
+            .get(id)
+            .and_then(|o| o.component_data(components::TRANSFORM))
+            .cloned();
         Ok(json!({"id": id.to_string(), "transform": t}))
     }
 }

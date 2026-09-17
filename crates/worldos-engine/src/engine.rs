@@ -9,13 +9,12 @@ use crate::error::EngineError;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use worldos_capability::{
-    Capability, CapabilityError, CapabilityHost, CapabilityRegistry,
-};
+use worldos_capability::{Capability, CapabilityError, CapabilityHost, CapabilityRegistry};
 use worldos_commands::{
-    CommandEnvelope, CommandError, CommandHandler, CommandReceipt, CommandRecord,
-    CommandRegistry, CommandSchema, History, Transaction,
+    CommandEnvelope, CommandError, CommandHandler, CommandReceipt, CommandRecord, CommandRegistry,
+    CommandSchema, History, Transaction,
 };
+use worldos_kernel::SearchQuery;
 use worldos_kernel::actor::{Actor, Permission};
 use worldos_kernel::events::EngineEvent;
 use worldos_kernel::ids::{ObjectId, TransactionId};
@@ -23,10 +22,12 @@ use worldos_kernel::model::{Object, Relation};
 use worldos_kernel::project::Project;
 use worldos_kernel::schema as jsonschema;
 use worldos_kernel::validation::{ValidationReport, Validator};
-use worldos_kernel::SearchQuery;
 use worldos_store::{ProjectStore, Snapshot, SqliteStore};
 
 const EVENT_CAP: usize = 2048;
+
+/// Subscriber callback for engine events.
+type EventListener = Box<dyn Fn(&EngineEvent) + Send>;
 
 pub struct Engine {
     project: Project,
@@ -37,7 +38,7 @@ pub struct Engine {
     open_txn: Option<Transaction>,
     actor: Actor,
     events: VecDeque<EngineEvent>,
-    listeners: Vec<Box<dyn Fn(&EngineEvent) + Send>>,
+    listeners: Vec<EventListener>,
     path: Option<PathBuf>,
     dirty: bool,
 }
@@ -194,7 +195,10 @@ impl Engine {
             .handler(command_type)
             .ok_or_else(|| CommandError::Unknown(command_type.into()))?;
         let schema = handler.schema();
-        if !actor.permissions.is_allowed(&Permission(schema.permission.clone())) {
+        if !actor
+            .permissions
+            .is_allowed(&Permission(schema.permission.clone()))
+        {
             return Err(CommandError::PermissionDenied {
                 command: command_type.into(),
                 perm: schema.permission,
@@ -212,8 +216,7 @@ impl Engine {
 
         let auto = self.open_txn.is_none();
         if auto {
-            self.open_txn =
-                Some(Transaction::new(actor.id.clone(), command_type.to_string()));
+            self.open_txn = Some(Transaction::new(actor.id.clone(), command_type.to_string()));
         }
         let txn = self.open_txn.as_mut().unwrap();
         let txn_id = txn.id;
@@ -249,7 +252,11 @@ impl Engine {
                 if auto {
                     self.commit_transaction()?;
                 }
-                Ok(CommandReceipt { command_id, transaction_id: txn_id, output })
+                Ok(CommandReceipt {
+                    command_id,
+                    transaction_id: txn_id,
+                    output,
+                })
             }
             Err(e) => {
                 let txn = self.open_txn.as_mut().unwrap();
@@ -270,7 +277,10 @@ impl Engine {
 
     // ----- transactions ---------------------------------------------------
 
-    pub fn begin_transaction(&mut self, label: impl Into<String>) -> Result<TransactionId, EngineError> {
+    pub fn begin_transaction(
+        &mut self,
+        label: impl Into<String>,
+    ) -> Result<TransactionId, EngineError> {
         let actor = self.actor.clone();
         self.begin_transaction_as(&actor, label)
     }
@@ -300,9 +310,10 @@ impl Engine {
                 .ops
                 .iter()
                 .filter_map(|op| match op {
-                    worldos_kernel::StateOp::SetObject { before, after } => {
-                        after.as_ref().map(|o| o.id).or_else(|| before.as_ref().map(|o| o.id))
-                    }
+                    worldos_kernel::StateOp::SetObject { before, after } => after
+                        .as_ref()
+                        .map(|o| o.id)
+                        .or_else(|| before.as_ref().map(|o| o.id)),
                     _ => None,
                 })
                 .collect::<Vec<_>>();
@@ -398,7 +409,11 @@ impl Engine {
         }
         let errors = jsonschema::validate(&d.input_schema, &input, "$");
         if !errors.is_empty() {
-            return Err(CapabilityError::Validation { capability: id.into(), errors }.into());
+            return Err(CapabilityError::Validation {
+                capability: id.into(),
+                errors,
+            }
+            .into());
         }
         Ok(cap.execute(self, &input)?)
     }
@@ -459,11 +474,7 @@ impl CapabilityHost for Engine {
             .map(|_| ())
             .map_err(|e| CapabilityError::Failed(e.to_string()))
     }
-    fn begin_transaction_as(
-        &mut self,
-        actor: &Actor,
-        label: &str,
-    ) -> Result<(), CapabilityError> {
+    fn begin_transaction_as(&mut self, actor: &Actor, label: &str) -> Result<(), CapabilityError> {
         Engine::begin_transaction_as(self, actor, label)
             .map(|_| ())
             .map_err(|e| CapabilityError::Failed(e.to_string()))
@@ -474,8 +485,7 @@ impl CapabilityHost for Engine {
             .map_err(|e| CapabilityError::Failed(e.to_string()))
     }
     fn rollback_transaction(&mut self) -> Result<(), CapabilityError> {
-        Engine::rollback_transaction(self)
-            .map_err(|e| CapabilityError::Failed(e.to_string()))
+        Engine::rollback_transaction(self).map_err(|e| CapabilityError::Failed(e.to_string()))
     }
     fn in_transaction(&self) -> bool {
         Engine::in_transaction(self)

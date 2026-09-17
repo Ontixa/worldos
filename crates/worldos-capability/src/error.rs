@@ -9,7 +9,10 @@ pub enum CapabilityError {
     #[error("permission denied: `{perm}` required for {capability}")]
     PermissionDenied { capability: String, perm: String },
     #[error("invalid input for {capability}: {}", .errors.join("; "))]
-    Validation { capability: String, errors: Vec<String> },
+    Validation {
+        capability: String,
+        errors: Vec<String>,
+    },
     #[error("capability failed: {0}")]
     Failed(String),
     #[error("io: {0}")]

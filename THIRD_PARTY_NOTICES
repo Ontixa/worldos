@@ -1,0 +1,39 @@
+THIRD-PARTY NOTICES
+===================
+
+WorldOS builds on open-source software. Direct dependencies and their
+licenses are listed below; transitive dependencies and their full license
+texts are available via `cargo deny` / `cargo tree` and
+`npm ls --all` in the respective workspaces.
+
+Rust crates (core workspace)
+----------------------------
+serde, serde_json ............. MIT OR Apache-2.0
+thiserror ..................... MIT OR Apache-2.0
+ulid .......................... MIT
+time .......................... MIT OR Apache-2.0
+tracing, tracing-subscriber ... MIT
+rusqlite (+ bundled SQLite) ... MIT (SQLite: public domain)
+tungstenite ................... MIT OR Apache-2.0
+clap .......................... MIT OR Apache-2.0
+ureq .......................... MIT OR Apache-2.0
+
+Rust crates (desktop, apps/desktop/src-tauri)
+---------------------------------------------
+tauri, tauri-build, wry, tao .. MIT OR Apache-2.0
+(webview2 runtime on Windows: Microsoft WebView2, proprietary runtime
+distributed by the OS — see https://www.microsoft.com/webview2)
+
+npm packages
+------------
+react, react-dom .............. MIT
+@vitejs/plugin-react, vite .... MIT
+typescript .................... Apache-2.0
+@tauri-apps/api, cli .......... MIT OR Apache-2.0
+vitest ........................ MIT
+
+License texts
+-------------
+MIT:     https://opensource.org/license/mit
+Apache-2.0: https://www.apache.org/licenses/LICENSE-2.0
+MPL-2.0: ./LICENSE

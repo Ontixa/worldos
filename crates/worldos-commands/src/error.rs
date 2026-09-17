@@ -8,7 +8,10 @@ pub enum CommandError {
     #[error("unknown command: {0}")]
     Unknown(String),
     #[error("invalid input for {command}: {}", .errors.join("; "))]
-    Validation { command: String, errors: Vec<String> },
+    Validation {
+        command: String,
+        errors: Vec<String>,
+    },
     #[error("permission denied: `{perm}` required for {command}")]
     PermissionDenied { command: String, perm: String },
     #[error("command failed: {0}")]

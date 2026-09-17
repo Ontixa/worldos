@@ -36,10 +36,7 @@ impl History {
     }
 
     /// Revert the most recent applied transaction. Returns its id.
-    pub fn undo(
-        &mut self,
-        project: &mut Project,
-    ) -> Option<worldos_kernel::ids::TransactionId> {
+    pub fn undo(&mut self, project: &mut Project) -> Option<worldos_kernel::ids::TransactionId> {
         if self.cursor == 0 {
             return None;
         }
@@ -55,10 +52,7 @@ impl History {
     }
 
     /// Re-apply the most recently undone transaction.
-    pub fn redo(
-        &mut self,
-        project: &mut Project,
-    ) -> Option<worldos_kernel::ids::TransactionId> {
+    pub fn redo(&mut self, project: &mut Project) -> Option<worldos_kernel::ids::TransactionId> {
         if self.cursor >= self.records.len() {
             return None;
         }

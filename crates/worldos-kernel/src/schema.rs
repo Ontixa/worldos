@@ -29,35 +29,41 @@ fn validate_into(schema: &Value, value: &Value, path: &str, errors: &mut Vec<Str
     if let Some(types) = schema.get("type") {
         let ok = match types {
             Value::String(t) => type_ok(t, value),
-            Value::Array(ts) => ts.iter().any(|t| {
-                t.as_str().map(|t| type_ok(t, value)).unwrap_or(false)
-            }),
+            Value::Array(ts) => ts
+                .iter()
+                .any(|t| t.as_str().map(|t| type_ok(t, value)).unwrap_or(false)),
             _ => true,
         };
         if !ok {
-            errors.push(format!("{path}: expected type {types}, got {}", kind_of(value)));
+            errors.push(format!(
+                "{path}: expected type {types}, got {}",
+                kind_of(value)
+            ));
             return;
         }
     }
-    if let Some(e) = schema.get("enum").and_then(|e| e.as_array()) {
-        if !e.contains(value) {
-            errors.push(format!("{path}: value not in enum"));
-        }
+    if let Some(e) = schema.get("enum").and_then(|e| e.as_array())
+        && !e.contains(value)
+    {
+        errors.push(format!("{path}: value not in enum"));
     }
-    if let Some(min) = schema.get("minimum").and_then(|m| m.as_f64()) {
-        if value.as_f64().map(|v| v < min).unwrap_or(false) {
-            errors.push(format!("{path}: below minimum {min}"));
-        }
+    if let Some(min) = schema.get("minimum").and_then(|m| m.as_f64())
+        && value.as_f64().map(|v| v < min).unwrap_or(false)
+    {
+        errors.push(format!("{path}: below minimum {min}"));
     }
-    if let Some(max) = schema.get("maximum").and_then(|m| m.as_f64()) {
-        if value.as_f64().map(|v| v > max).unwrap_or(false) {
-            errors.push(format!("{path}: above maximum {max}"));
-        }
+    if let Some(max) = schema.get("maximum").and_then(|m| m.as_f64())
+        && value.as_f64().map(|v| v > max).unwrap_or(false)
+    {
+        errors.push(format!("{path}: above maximum {max}"));
     }
-    if let Some(min_len) = schema.get("minLength").and_then(|m| m.as_u64()) {
-        if value.as_str().map(|s| (s.len() as u64) < min_len).unwrap_or(false) {
-            errors.push(format!("{path}: shorter than minLength {min_len}"));
-        }
+    if let Some(min_len) = schema.get("minLength").and_then(|m| m.as_u64())
+        && value
+            .as_str()
+            .map(|s| (s.len() as u64) < min_len)
+            .unwrap_or(false)
+    {
+        errors.push(format!("{path}: shorter than minLength {min_len}"));
     }
     if let Value::Object(obj) = value {
         if let Some(req) = schema.get("required").and_then(|r| r.as_array()) {
@@ -74,19 +80,17 @@ fn validate_into(schema: &Value, value: &Value, path: &str, errors: &mut Vec<Str
                 }
             }
         }
-        if schema.get("additionalProperties") == Some(&Value::Bool(false)) {
-            if let Some(props) = schema.get("properties").and_then(|p| p.as_object()) {
-                for k in obj.keys() {
-                    if !props.contains_key(k) {
-                        errors.push(format!("{path}: unexpected property `{k}`"));
-                    }
+        if schema.get("additionalProperties") == Some(&Value::Bool(false))
+            && let Some(props) = schema.get("properties").and_then(|p| p.as_object())
+        {
+            for k in obj.keys() {
+                if !props.contains_key(k) {
+                    errors.push(format!("{path}: unexpected property `{k}`"));
                 }
             }
         }
     }
-    if let (Value::Array(items), Some(item_schema)) =
-        (value, schema.get("items"))
-    {
+    if let (Value::Array(items), Some(item_schema)) = (value, schema.get("items")) {
         for (i, item) in items.iter().enumerate() {
             validate_into(item_schema, item, &format!("{path}[{i}]"), errors);
         }

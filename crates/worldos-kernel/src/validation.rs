@@ -31,7 +31,11 @@ impl ValidationReport {
         let passed = !diagnostics
             .iter()
             .any(|d| d.severity == crate::error::Severity::Error);
-        Self { validator_runs: runs, diagnostics, passed }
+        Self {
+            validator_runs: runs,
+            diagnostics,
+            passed,
+        }
     }
 }
 
@@ -52,7 +56,10 @@ impl Validator for RelationIntegrity {
             .map(|r| {
                 Diagnostic::error(
                     "dangling-relation",
-                    format!("relation {} ({}) references a missing object", r.id, r.type_id),
+                    format!(
+                        "relation {} ({}) references a missing object",
+                        r.id, r.type_id
+                    ),
                 )
                 .hint("remove the relation or restore the missing object")
             })
@@ -78,7 +85,10 @@ impl Validator for UniqueNames {
                 out.push(
                     Diagnostic::warning(
                         "duplicate-name",
-                        format!("name `{}` is shared by objects {} and {}", obj.name, prev, obj.id),
+                        format!(
+                            "name `{}` is shared by objects {} and {}",
+                            obj.name, prev, obj.id
+                        ),
                     )
                     .at(obj.id),
                 );

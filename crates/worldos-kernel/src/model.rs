@@ -26,7 +26,11 @@ pub struct Component {
 
 impl Component {
     pub fn new(type_id: impl Into<String>, data: Value) -> Self {
-        Self { type_id: type_id.into(), version: 1, data }
+        Self {
+            type_id: type_id.into(),
+            version: 1,
+            data,
+        }
     }
 }
 
@@ -110,12 +114,7 @@ pub struct Relation {
 }
 
 impl Relation {
-    pub fn new(
-        type_id: impl Into<String>,
-        from: ObjectId,
-        to: ObjectId,
-        actor: &ActorId,
-    ) -> Self {
+    pub fn new(type_id: impl Into<String>, from: ObjectId, to: ObjectId, actor: &ActorId) -> Self {
         Self {
             id: RelationId::new(),
             type_id: type_id.into(),

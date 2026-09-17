@@ -39,7 +39,10 @@ pub fn evaluate(project: &Project, req: &Object) -> (RequirementStatus, String) 
     match eval_expr(project, expr.trim()) {
         Ok(true) => (RequirementStatus::Pass, format!("`{expr}` satisfied")),
         Ok(false) => (RequirementStatus::Fail, format!("`{expr}` not satisfied")),
-        Err(e) => (RequirementStatus::Unknown, format!("cannot evaluate `{expr}`: {e}")),
+        Err(e) => (
+            RequirementStatus::Unknown,
+            format!("cannot evaluate `{expr}`: {e}"),
+        ),
     }
 }
 
@@ -80,17 +83,32 @@ fn eval_term(project: &Project, term: &str) -> Result<f64, KernelError> {
     if term == "false" {
         return Ok(0.0);
     }
-    if let Some(inner) = term.strip_prefix("exists(").and_then(|s| s.strip_suffix(')')) {
+    if let Some(inner) = term
+        .strip_prefix("exists(")
+        .and_then(|s| s.strip_suffix(')'))
+    {
         let t = inner.trim().trim_matches('"').trim_matches('\'');
-        return Ok(if project.objects_of_type(t).next().is_some() { 1.0 } else { 0.0 });
+        return Ok(if project.objects_of_type(t).next().is_some() {
+            1.0
+        } else {
+            0.0
+        });
     }
-    if let Some(inner) =
-        term.strip_prefix("exists_named(").and_then(|s| s.strip_suffix(')'))
+    if let Some(inner) = term
+        .strip_prefix("exists_named(")
+        .and_then(|s| s.strip_suffix(')'))
     {
         let n = inner.trim().trim_matches('"').trim_matches('\'');
-        return Ok(if project.find_by_name(n).is_some() { 1.0 } else { 0.0 });
+        return Ok(if project.find_by_name(n).is_some() {
+            1.0
+        } else {
+            0.0
+        });
     }
-    if let Some(inner) = term.strip_prefix("count(").and_then(|s| s.strip_suffix(')')) {
+    if let Some(inner) = term
+        .strip_prefix("count(")
+        .and_then(|s| s.strip_suffix(')'))
+    {
         let t = inner.trim().trim_matches('"').trim_matches('\'');
         return Ok(project.objects_of_type(t).count() as f64);
     }

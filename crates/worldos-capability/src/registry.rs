@@ -41,7 +41,9 @@ impl CapabilityRegistry {
     /// Specific provider for a capability id.
     pub fn get_provider(&self, id: &str, provider: &str) -> Option<Arc<dyn Capability>> {
         self.providers.get(id).and_then(|v| {
-            v.iter().find(|c| c.descriptor().provider.id == provider).cloned()
+            v.iter()
+                .find(|c| c.descriptor().provider.id == provider)
+                .cloned()
         })
     }
     pub fn descriptors(&self) -> Vec<CapabilityDescriptor> {

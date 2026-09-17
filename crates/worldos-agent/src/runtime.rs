@@ -31,13 +31,19 @@ pub struct AgentRuntime {
 
 impl Default for AgentRuntime {
     fn default() -> Self {
-        Self { planner: Box::new(RulePlanner), budget: Budget::default() }
+        Self {
+            planner: Box::new(RulePlanner),
+            budget: Budget::default(),
+        }
     }
 }
 
 impl AgentRuntime {
     pub fn new(planner: Box<dyn Planner>) -> Self {
-        Self { planner, budget: Budget::default() }
+        Self {
+            planner,
+            budget: Budget::default(),
+        }
     }
     pub fn with_budget(mut self, budget: Budget) -> Self {
         self.budget = budget;
@@ -47,12 +53,7 @@ impl AgentRuntime {
     /// Execute a goal against the host. All effects commit as ONE
     /// transaction attributed to the agent actor; any failure rolls back
     /// cleanly and is reported — never silently half-applied.
-    pub fn run(
-        &self,
-        host: &mut dyn CapabilityHost,
-        goal: &str,
-        agent_name: &str,
-    ) -> AgentReport {
+    pub fn run(&self, host: &mut dyn CapabilityHost, goal: &str, agent_name: &str) -> AgentReport {
         let run_id = AgentRunId::new();
         let agent = Actor::agent(agent_name);
 
@@ -81,7 +82,11 @@ impl AgentRuntime {
                 run_id,
                 agent_name,
                 goal,
-                format!("plan needs {} steps, budget is {}", steps.len(), self.budget.max_steps),
+                format!(
+                    "plan needs {} steps, budget is {}",
+                    steps.len(),
+                    self.budget.max_steps
+                ),
             );
         }
 
@@ -174,7 +179,10 @@ impl AgentRuntime {
         let created: Vec<String> = created.into_iter().collect();
         let verification = verify(host, &steps, &created);
         let summary = if records.is_empty() {
-            format!("read-only goal; project has {} objects", host.project().objects.len())
+            format!(
+                "read-only goal; project has {} objects",
+                host.project().objects.len()
+            )
         } else {
             format!(
                 "{} step(s) succeeded; {} object(s) affected",
@@ -200,41 +208,40 @@ impl AgentRuntime {
 fn resolve_refs(input: &Value, outputs: &[Value]) -> Value {
     match input {
         Value::String(s) => {
-            if let Some(rest) = s.strip_prefix('$') {
-                if let Some((idx, path)) = rest.split_once('.') {
-                    if let Ok(i) = idx.parse::<usize>() {
-                        if let Some(out) = outputs.get(i) {
-                            let mut cur = out;
-                            for seg in path.split('.') {
-                                cur = &cur[seg];
-                            }
-                            return cur.clone();
-                        }
-                    }
+            if let Some(rest) = s.strip_prefix('$')
+                && let Some((idx, path)) = rest.split_once('.')
+                && let Ok(i) = idx.parse::<usize>()
+                && let Some(out) = outputs.get(i)
+            {
+                let mut cur = out;
+                for seg in path.split('.') {
+                    cur = &cur[seg];
                 }
+                return cur.clone();
             }
             input.clone()
         }
         Value::Array(a) => Value::Array(a.iter().map(|v| resolve_refs(v, outputs)).collect()),
         Value::Object(m) => Value::Object(
-            m.iter().map(|(k, v)| (k.clone(), resolve_refs(v, outputs))).collect(),
+            m.iter()
+                .map(|(k, v)| (k.clone(), resolve_refs(v, outputs)))
+                .collect(),
         ),
         _ => input.clone(),
     }
 }
 
 /// Post-run checks: every object a step claims to have created must exist.
-fn verify(
-    host: &dyn CapabilityHost,
-    _steps: &[PlannedStep],
-    created: &[String],
-) -> Vec<String> {
+fn verify(host: &dyn CapabilityHost, _steps: &[PlannedStep], created: &[String]) -> Vec<String> {
     created
         .iter()
         .filter_map(|id| {
             let oid = id.parse().ok()?;
             let obj = host.project().get(oid)?;
-            Some(format!("verified object {} ({}, {})", obj.name, obj.type_id, id))
+            Some(format!(
+                "verified object {} ({}, {})",
+                obj.name, obj.type_id, id
+            ))
         })
         .collect()
 }

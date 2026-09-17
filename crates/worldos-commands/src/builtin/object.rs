@@ -2,8 +2,8 @@
 
 use crate::error::CommandError;
 use crate::handler::{CommandContext, CommandHandler};
-use crate::schema::{props, CommandSchema};
-use serde_json::{json, Value};
+use crate::schema::{CommandSchema, props};
+use serde_json::{Value, json};
 use worldos_kernel::error::KernelError;
 use worldos_kernel::ids::ObjectId;
 use worldos_kernel::known;
@@ -60,7 +60,10 @@ impl CommandHandler for ObjectCreate {
             }
         }
         if let Some(tags) = input.get("tags").and_then(|t| t.as_array()) {
-            obj.tags = tags.iter().filter_map(|t| t.as_str().map(String::from)).collect();
+            obj.tags = tags
+                .iter()
+                .filter_map(|t| t.as_str().map(String::from))
+                .collect();
         }
         let id = ctx.insert_object(obj)?;
         if let Some(parent) = input.get("parent").and_then(|p| p.as_str()) {
@@ -91,7 +94,10 @@ impl CommandHandler for ObjectDelete {
     }
     fn execute(&self, ctx: &mut CommandContext, input: &Value) -> Result<Value, CommandError> {
         let id = resolve_object(ctx, input)?;
-        let cascade = input.get("cascade").and_then(|c| c.as_bool()).unwrap_or(false);
+        let cascade = input
+            .get("cascade")
+            .and_then(|c| c.as_bool())
+            .unwrap_or(false);
         let targets = if cascade {
             ctx.project.collect_subtree(id)
         } else {
@@ -188,10 +194,10 @@ pub fn set_path(root: &mut Value, path: &str, value: Value) {
             }
             return;
         }
-        if !cur.get(seg).map(|v| v.is_object()).unwrap_or(false) {
-            if let Value::Object(m) = cur {
-                m.insert(seg.to_string(), json!({}));
-            }
+        if !cur.get(seg).map(|v| v.is_object()).unwrap_or(false)
+            && let Value::Object(m) = cur
+        {
+            m.insert(seg.to_string(), json!({}));
         }
         cur = cur.get_mut(seg).unwrap();
     }

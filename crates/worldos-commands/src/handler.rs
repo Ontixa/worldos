@@ -62,8 +62,7 @@ impl<'a> CommandContext<'a> {
             .cloned()
             .ok_or_else(|| KernelError::ObjectNotFound(id.to_string()))?;
         // remove attached relations first (order matters for undo)
-        let rel_ids: Vec<RelationId> =
-            self.project.relations_of(id).map(|r| r.id).collect();
+        let rel_ids: Vec<RelationId> = self.project.relations_of(id).map(|r| r.id).collect();
         for rid in rel_ids {
             self.remove_relation(rid)?;
         }

@@ -32,19 +32,34 @@ pub enum StateOp {
 
 impl StateOp {
     pub fn object_created(obj: Object) -> Self {
-        Self::SetObject { before: None, after: Some(Box::new(obj)) }
+        Self::SetObject {
+            before: None,
+            after: Some(Box::new(obj)),
+        }
     }
     pub fn object_updated(before: Object, after: Object) -> Self {
-        Self::SetObject { before: Some(Box::new(before)), after: Some(Box::new(after)) }
+        Self::SetObject {
+            before: Some(Box::new(before)),
+            after: Some(Box::new(after)),
+        }
     }
     pub fn object_deleted(obj: Object) -> Self {
-        Self::SetObject { before: Some(Box::new(obj)), after: None }
+        Self::SetObject {
+            before: Some(Box::new(obj)),
+            after: None,
+        }
     }
     pub fn relation_created(rel: Relation) -> Self {
-        Self::SetRelation { before: None, after: Some(Box::new(rel)) }
+        Self::SetRelation {
+            before: None,
+            after: Some(Box::new(rel)),
+        }
     }
     pub fn relation_deleted(rel: Relation) -> Self {
-        Self::SetRelation { before: Some(Box::new(rel)), after: None }
+        Self::SetRelation {
+            before: Some(Box::new(rel)),
+            after: None,
+        }
     }
 
     /// Short human/agent readable summary of the change.

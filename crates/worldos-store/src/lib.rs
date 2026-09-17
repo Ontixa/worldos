@@ -9,6 +9,6 @@ pub mod sqlite;
 pub mod store;
 
 pub use error::StoreError;
-pub use snapshot::{Snapshot, FORMAT_VERSION};
+pub use snapshot::{FORMAT_VERSION, Snapshot};
 pub use sqlite::SqliteStore;
 pub use store::{MemoryStore, ProjectStore};

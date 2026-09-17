@@ -7,7 +7,7 @@
 //! verify — never freeform mutation.
 
 use crate::report::StepRecord;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use worldos_capability::CapabilityHost;
 use worldos_kernel::known::{components, types};
 
@@ -65,7 +65,8 @@ impl Planner for RulePlanner {
                 note: "evaluate all requirements".into(),
             }]);
         }
-        if lower.starts_with("inspect") || lower.starts_with("list") || lower.contains("what is in") {
+        if lower.starts_with("inspect") || lower.starts_with("list") || lower.contains("what is in")
+        {
             // read-only goal → no steps; the runtime reports project state
             return Ok(vec![]);
         }
@@ -80,8 +81,8 @@ fn extract_name(lower: &str) -> Option<String> {
         if let Some(i) = lower.find(marker) {
             let rest = lower[i + marker.len()..]
                 .trim()
-                .trim_start_matches(|c| c == ':' || c == ' ')
-                .trim_end_matches(|c| c == '.' || c == '!' || c == ';');
+                .trim_start_matches([':', ' '])
+                .trim_end_matches(['.', '!', ';']);
             let rest = rest.trim_matches(|c| c == '\'' || c == '"');
             // strip trailing clauses like "and verify"
             let rest = rest.split(" and ").next().unwrap_or(rest).trim();
@@ -98,13 +99,12 @@ fn extract_anchor(lower: &str) -> Option<String> {
     for marker in ["next to", "beside", "near"] {
         if let Some(i) = lower.find(marker) {
             let rest = lower[i + marker.len()..].trim();
-            let rest = rest
-                .trim_start_matches("the ")
-                .trim_end_matches(|c| c == '.' || c == ',');
-            // anchor may be followed by " and name it ..." — cut there
-            let cut = rest
-                .find(" and name")
-                .or_else(|| rest.find(" and call"))
+            let rest = rest.trim_start_matches("the ").trim_end_matches(['.', ',']);
+            // anchor may be followed by " named X" / " and name it X" — cut there
+            let cut = [" and name", " and call", " named ", " called "]
+                .iter()
+                .filter_map(|m| rest.find(m))
+                .min()
                 .unwrap_or(rest.len());
             let anchor = rest[..cut].trim().trim_matches(|c| c == '\'' || c == '"');
             if !anchor.is_empty() {
@@ -131,7 +131,9 @@ fn resolve_anchor(host: &dyn CapabilityHost, anchor: &str) -> Option<worldos_ker
 
 /// Width (x-dimension) of an object for "next to" placement.
 fn object_width(host: &dyn CapabilityHost, id: worldos_kernel::ObjectId) -> f64 {
-    let Some(obj) = host.project().get(id) else { return 1.0 };
+    let Some(obj) = host.project().get(id) else {
+        return 1.0;
+    };
     let geom = obj.component_data(components::GEOMETRY);
     let xf = obj.component_data(components::TRANSFORM);
     let sx = xf
@@ -165,8 +167,12 @@ fn object_position(host: &dyn CapabilityHost, id: worldos_kernel::ObjectId) -> [
         .unwrap_or([0.0, 0.0, 0.0])
 }
 
-fn try_create(lower: &str, host: &dyn CapabilityHost) -> Result<Option<Vec<PlannedStep>>, PlanError> {
-    let is_create = lower.starts_with("create") || lower.starts_with("add") || lower.starts_with("make");
+fn try_create(
+    lower: &str,
+    host: &dyn CapabilityHost,
+) -> Result<Option<Vec<PlannedStep>>, PlanError> {
+    let is_create =
+        lower.starts_with("create") || lower.starts_with("add") || lower.starts_with("make");
     if !is_create {
         return Ok(None);
     }
@@ -174,11 +180,7 @@ fn try_create(lower: &str, host: &dyn CapabilityHost) -> Result<Option<Vec<Plann
     let anchor = extract_anchor(lower).and_then(|a| resolve_anchor(host, &a));
 
     if lower.contains("note") || lower.contains("document") {
-        let text = lower
-            .split(|c| c == '\'' || c == '"')
-            .nth(1)
-            .unwrap_or("")
-            .to_string();
+        let text = lower.split(['\'', '"']).nth(1).unwrap_or("").to_string();
         return Ok(Some(vec![PlannedStep {
             command: "document.create".into(),
             input: json!({
@@ -209,7 +211,12 @@ fn try_create(lower: &str, host: &dyn CapabilityHost) -> Result<Option<Vec<Plann
                 });
             }
             // re-evaluate requirements after structural change
-            if host.project().objects_of_type(types::REQUIREMENT).next().is_some() {
+            if host
+                .project()
+                .objects_of_type(types::REQUIREMENT)
+                .next()
+                .is_some()
+            {
                 steps.push(PlannedStep {
                     command: "requirement.evaluate".into(),
                     input: json!({"all": true}),
@@ -241,7 +248,9 @@ fn try_rename(lower: &str) -> Result<Option<Vec<PlannedStep>>, PlanError> {
     // "rename X to Y"
     let body = lower.trim_start_matches("rename").trim();
     let Some((from, to)) = body.split_once(" to ") else {
-        return Err(PlanError::Failed("expected `rename <object> to <new name>`".into()));
+        return Err(PlanError::Failed(
+            "expected `rename <object> to <new name>`".into(),
+        ));
     };
     Ok(Some(vec![PlannedStep {
         command: "object.rename".into(),
@@ -260,12 +269,14 @@ fn try_move(lower: &str, host: &dyn CapabilityHost) -> Result<Option<Vec<Planned
         .trim();
     // "move X to [x,y,z]" or "move X to x,y,z"
     let Some((name, target)) = body.split_once(" to ") else {
-        return Err(PlanError::Failed("expected `move <object> to [x,y,z]`".into()));
+        return Err(PlanError::Failed(
+            "expected `move <object> to [x,y,z]`".into(),
+        ));
     };
     let nums: Vec<f64> = target
         .trim()
         .trim_start_matches('[')
-        .trim_end_matches(|c| c == ']' || c == '.')
+        .trim_end_matches([']', '.'])
         .split(',')
         .filter_map(|s| s.trim().parse().ok())
         .collect();
@@ -283,7 +294,10 @@ fn try_move(lower: &str, host: &dyn CapabilityHost) -> Result<Option<Vec<Planned
     }]))
 }
 
-fn try_delete(lower: &str, host: &dyn CapabilityHost) -> Result<Option<Vec<PlannedStep>>, PlanError> {
+fn try_delete(
+    lower: &str,
+    host: &dyn CapabilityHost,
+) -> Result<Option<Vec<PlannedStep>>, PlanError> {
     if !lower.starts_with("delete") && !lower.starts_with("remove") {
         return Ok(None);
     }
@@ -351,7 +365,10 @@ impl<P: crate::provider::ModelProvider> Planner for LlmPlanner<P> {
 pub fn parse_llm_steps(text: &str) -> Result<Vec<PlannedStep>, PlanError> {
     // tolerate ```json fences
     let t = text.trim();
-    let t = t.strip_prefix("```json").or_else(|| t.strip_prefix("```")).unwrap_or(t);
+    let t = t
+        .strip_prefix("```json")
+        .or_else(|| t.strip_prefix("```"))
+        .unwrap_or(t);
     let t = t.strip_suffix("```").unwrap_or(t).trim();
     let arr: Vec<Value> =
         serde_json::from_str(t).map_err(|e| PlanError::Failed(format!("bad plan JSON: {e}")))?;
@@ -364,7 +381,11 @@ pub fn parse_llm_steps(text: &str) -> Result<Vec<PlannedStep>, PlanError> {
                     .ok_or_else(|| PlanError::Failed(format!("step {i}: missing command")))?
                     .to_string(),
                 input: s.get("input").cloned().unwrap_or(json!({})),
-                note: s.get("note").and_then(|n| n.as_str()).unwrap_or("").to_string(),
+                note: s
+                    .get("note")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("")
+                    .to_string(),
             })
         })
         .collect()
@@ -372,5 +393,8 @@ pub fn parse_llm_steps(text: &str) -> Result<Vec<PlannedStep>, PlanError> {
 
 /// Convert an executed step list into report records.
 pub fn to_records(steps: &[StepRecord]) -> Vec<String> {
-    steps.iter().map(|s| format!("{}: {} ({})", s.index, s.command, s.note)).collect()
+    steps
+        .iter()
+        .map(|s| format!("{}: {} ({})", s.index, s.command, s.note))
+        .collect()
 }

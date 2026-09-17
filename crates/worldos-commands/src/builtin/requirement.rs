@@ -2,8 +2,8 @@
 
 use crate::error::CommandError;
 use crate::handler::{CommandContext, CommandHandler};
-use crate::schema::{props, CommandSchema};
-use serde_json::{json, Value};
+use crate::schema::{CommandSchema, props};
+use serde_json::{Value, json};
 use worldos_kernel::known::{components, rel, types};
 
 pub struct RequirementCreate;
@@ -82,9 +82,10 @@ impl CommandHandler for RequirementEvaluate {
         let mut results = Vec::new();
         for id in targets {
             let (status, verdict) = {
-                let req = ctx.project.get(id).ok_or_else(|| {
-                    CommandError::Failed(format!("object {id} not found"))
-                })?;
+                let req = ctx
+                    .project
+                    .get(id)
+                    .ok_or_else(|| CommandError::Failed(format!("object {id} not found")))?;
                 worldos_kernel::requirement::evaluate(ctx.project, req)
             };
             let status_str = serde_json::to_value(status)?.as_str().unwrap().to_string();

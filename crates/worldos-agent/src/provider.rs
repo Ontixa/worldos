@@ -27,7 +27,7 @@ pub trait ModelProvider: Send + Sync {
 /// Provider configuration resolved from environment / config files.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderConfig {
-    pub kind: String,          // "openai-compatible" | "echo"
+    pub kind: String, // "openai-compatible" | "echo"
     pub base_url: Option<String>,
     pub model: Option<String>,
     /// NAME of the env var holding the API key (never the key itself).

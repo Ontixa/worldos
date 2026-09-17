@@ -6,12 +6,12 @@
 //! [`migrate`].
 
 use crate::error::StoreError;
-use crate::snapshot::{Snapshot, FORMAT_VERSION};
+use crate::snapshot::{FORMAT_VERSION, Snapshot};
 use crate::store::ProjectStore;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use std::path::{Path, PathBuf};
 use worldos_commands::History;
-use worldos_kernel::project::{Project, PROJECT_SCHEMA_VERSION};
+use worldos_kernel::project::{PROJECT_SCHEMA_VERSION, Project};
 
 const SCHEMA_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS meta (
@@ -74,13 +74,18 @@ impl SqliteStore {
     /// In-memory store (tests).
     pub fn in_memory() -> Result<Self, StoreError> {
         let conn = Connection::open_in_memory()?;
-        let mut store = Self { path: PathBuf::from(":memory:"), conn };
+        let mut store = Self {
+            path: PathBuf::from(":memory:"),
+            conn,
+        };
         store.migrate()?;
         Ok(store)
     }
 
     fn user_version(&self) -> Result<u32, StoreError> {
-        Ok(self.conn.pragma_query_value(None, "user_version", |r| r.get(0))?)
+        Ok(self
+            .conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))?)
     }
 
     fn migrate(&mut self) -> Result<(), StoreError> {
@@ -107,11 +112,9 @@ impl SqliteStore {
 impl ProjectStore for SqliteStore {
     fn exists(&self) -> bool {
         self.conn
-            .query_row(
-                "SELECT value FROM meta WHERE key='project_id'",
-                [],
-                |r| r.get::<_, String>(0),
-            )
+            .query_row("SELECT value FROM meta WHERE key='project_id'", [], |r| {
+                r.get::<_, String>(0)
+            })
             .is_ok()
     }
 
@@ -120,14 +123,16 @@ impl ProjectStore for SqliteStore {
             return Err(StoreError::NotFound(self.path.display().to_string()));
         }
         let meta = |k: &str| -> Result<String, StoreError> {
-            Ok(self.conn.query_row(
-                "SELECT value FROM meta WHERE key=?1",
-                params![k],
-                |r| r.get(0),
-            )?)
+            Ok(self
+                .conn
+                .query_row("SELECT value FROM meta WHERE key=?1", params![k], |r| {
+                    r.get(0)
+                })?)
         };
         let mut project = Project {
-            id: meta("project_id")?.parse().map_err(|_| StoreError::Corrupt("project_id".into()))?,
+            id: meta("project_id")?
+                .parse()
+                .map_err(|_| StoreError::Corrupt("project_id".into()))?,
             name: meta("name")?,
             schema_version: meta("schema_version")?
                 .parse()
@@ -138,9 +143,9 @@ impl ProjectStore for SqliteStore {
             settings: serde_json::from_str(&meta("settings").unwrap_or_else(|_| "{}".into()))?,
         };
 
-        let mut stmt = self.conn.prepare(
-            "SELECT id, type_id, name, tags, components, meta FROM objects",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, type_id, name, tags, components, meta FROM objects")?;
         let rows = stmt.query_map([], |r| {
             Ok((
                 r.get::<_, String>(0)?,
@@ -154,7 +159,9 @@ impl ProjectStore for SqliteStore {
         for row in rows {
             let (id, type_id, name, tags, components, meta) = row?;
             let obj = worldos_kernel::Object {
-                id: id.parse().map_err(|_| StoreError::Corrupt("object id".into()))?,
+                id: id
+                    .parse()
+                    .map_err(|_| StoreError::Corrupt("object id".into()))?,
                 type_id: worldos_kernel::TypeId::new(type_id),
                 name,
                 tags: serde_json::from_str(&tags)?,
@@ -164,9 +171,9 @@ impl ProjectStore for SqliteStore {
             project.objects.insert(obj.id, obj);
         }
 
-        let mut stmt = self.conn.prepare(
-            "SELECT id, type_id, from_id, to_id, properties, meta FROM relations",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, type_id, from_id, to_id, properties, meta FROM relations")?;
         let rows = stmt.query_map([], |r| {
             Ok((
                 r.get::<_, String>(0)?,
@@ -180,10 +187,16 @@ impl ProjectStore for SqliteStore {
         for row in rows {
             let (id, type_id, from, to, properties, meta) = row?;
             let rel = worldos_kernel::Relation {
-                id: id.parse().map_err(|_| StoreError::Corrupt("relation id".into()))?,
+                id: id
+                    .parse()
+                    .map_err(|_| StoreError::Corrupt("relation id".into()))?,
                 type_id,
-                from: from.parse().map_err(|_| StoreError::Corrupt("from id".into()))?,
-                to: to.parse().map_err(|_| StoreError::Corrupt("to id".into()))?,
+                from: from
+                    .parse()
+                    .map_err(|_| StoreError::Corrupt("from id".into()))?,
+                to: to
+                    .parse()
+                    .map_err(|_| StoreError::Corrupt("to id".into()))?,
                 properties: serde_json::from_str(&properties)?,
                 meta: meta.and_then(|m| serde_json::from_str(&m).ok()).flatten(),
             };
@@ -210,7 +223,9 @@ impl ProjectStore for SqliteStore {
         for row in rows {
             let (id, actor, label, started, committed, undone, commands, ops) = row?;
             history.records.push(worldos_commands::TransactionRecord {
-                id: id.parse().map_err(|_| StoreError::Corrupt("txn id".into()))?,
+                id: id
+                    .parse()
+                    .map_err(|_| StoreError::Corrupt("txn id".into()))?,
                 index: history.records.len() as u64,
                 actor: worldos_kernel::ActorId::new(actor),
                 label,
@@ -222,7 +237,12 @@ impl ProjectStore for SqliteStore {
             });
         }
         // Linear undo: undone records form a contiguous suffix.
-        let undone_tail = history.records.iter().rev().take_while(|r| r.undone).count();
+        let undone_tail = history
+            .records
+            .iter()
+            .rev()
+            .take_while(|r| r.undone)
+            .count();
         history.cursor = history.records.len() - undone_tail;
 
         let mut snap = Snapshot::new(project, history);

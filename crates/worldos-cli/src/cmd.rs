@@ -1,11 +1,11 @@
 //! Subcommand implementations — all through `Engine`.
 
-use crate::{out, Cmd, PluginCmd};
-use serde_json::{json, Value};
+use crate::{Cmd, PluginCmd, out};
+use serde_json::{Value, json};
 use std::path::Path;
 use std::sync::Arc;
 use worldos_agent::AgentRun;
-use worldos_engine::{diff_projects, Engine};
+use worldos_engine::{Engine, diff_projects};
 use worldos_rpc::RpcService;
 
 pub fn run(cmd: Cmd, json_out: bool) -> Result<(), Box<dyn std::error::Error>> {
@@ -15,9 +15,13 @@ pub fn run(cmd: Cmd, json_out: bool) -> Result<(), Box<dyn std::error::Error>> {
             let mut e = Engine::create(&name, &path)?;
             register_extras(&mut e);
             e.save()?;
-            print(json_out, &json!({"created": path.display().to_string(), "name": name}), |v| {
-                println!("created `{}` at {}", v["name"], v["created"]);
-            });
+            print(
+                json_out,
+                &json!({"created": path.display().to_string(), "name": name}),
+                |v| {
+                    println!("created `{}` at {}", v["name"], v["created"]);
+                },
+            );
         }
         Cmd::Open { file } | Cmd::Inspect { file, object: None } => {
             let e = open(&file)?;
@@ -31,31 +35,47 @@ pub fn run(cmd: Cmd, json_out: bool) -> Result<(), Box<dyn std::error::Error>> {
                 out::kv("undo/redo", format!("{}/{}", v["can_undo"], v["can_redo"]));
             });
         }
-        Cmd::Inspect { file, object: Some(key) } => {
+        Cmd::Inspect {
+            file,
+            object: Some(key),
+        } => {
             let e = open(&file)?;
             let obj = resolve(&e, &key).ok_or(format!("object `{key}` not found"))?;
             print(json_out, &serde_json::to_value(obj)?, |o| {
-                println!("{}  ({})", o["name"].as_str().unwrap(), o["type_id"].as_str().unwrap());
+                println!(
+                    "{}  ({})",
+                    o["name"].as_str().unwrap(),
+                    o["type_id"].as_str().unwrap()
+                );
                 out::kv("id", o["id"].as_str().unwrap());
                 for (ctype, comp) in o["components"].as_object().into_iter().flatten() {
                     println!("  ▣ {ctype} v{}", comp["version"]);
-                    println!("{}", indent(&serde_json::to_string_pretty(&comp["data"]).unwrap_or_default()));
+                    println!(
+                        "{}",
+                        indent(&serde_json::to_string_pretty(&comp["data"]).unwrap_or_default())
+                    );
                 }
             });
         }
         Cmd::Graph { file } => {
             let e = open(&file)?;
             let p = e.project();
-            let nodes: Vec<Value> = p.sorted_objects().iter().map(|o| {
-                json!({"id": o.id.to_string(), "name": o.name, "type": o.type_id})
-            }).collect();
+            let nodes: Vec<Value> = p
+                .sorted_objects()
+                .iter()
+                .map(|o| json!({"id": o.id.to_string(), "name": o.name, "type": o.type_id}))
+                .collect();
             let edges: Vec<Value> = p.relations.values().map(|r| {
                 json!({"type": r.type_id, "from": r.from.to_string(), "to": r.to.to_string()})
             }).collect();
             print(json_out, &json!({"nodes": nodes, "edges": edges}), |g| {
                 out::header("Objects");
                 for n in g["nodes"].as_array().unwrap() {
-                    println!("  {}  [{}]", n["name"].as_str().unwrap(), n["type"].as_str().unwrap());
+                    println!(
+                        "  {}  [{}]",
+                        n["name"].as_str().unwrap(),
+                        n["type"].as_str().unwrap()
+                    );
                 }
                 out::header("Relations");
                 for e in g["edges"].as_array().unwrap() {
@@ -79,9 +99,16 @@ pub fn run(cmd: Cmd, json_out: bool) -> Result<(), Box<dyn std::error::Error>> {
                 return Err("validation failed".into());
             }
         }
-        Cmd::Command { file, command, input } => {
+        Cmd::Command {
+            file,
+            command,
+            input,
+        } => {
             let mut e = open(&file)?;
-            let input: Value = input.map(|s| serde_json::from_str(&s)).transpose()?.unwrap_or(json!({}));
+            let input: Value = input
+                .map(|s| serde_json::from_str(&s))
+                .transpose()?
+                .unwrap_or(json!({}));
             let receipt = e.execute(&command, input)?;
             e.save()?;
             print(json_out, &receipt, |r| {
@@ -112,7 +139,10 @@ pub fn run(cmd: Cmd, json_out: bool) -> Result<(), Box<dyn std::error::Error>> {
             }
             e.save()?;
             print(json_out, &json!({"outputs": outputs}), |v| {
-                println!("✓ {} command(s) committed", v["outputs"].as_array().unwrap().len());
+                println!(
+                    "✓ {} command(s) committed",
+                    v["outputs"].as_array().unwrap().len()
+                );
             });
         }
         Cmd::Commands { file } => {
@@ -135,17 +165,34 @@ pub fn run(cmd: Cmd, json_out: bool) -> Result<(), Box<dyn std::error::Error>> {
         }
         Cmd::History { file, limit } => {
             let e = open(&file)?;
-            let recs: Vec<Value> = e.history().records.iter().rev().take(limit).map(|r| {
-                json!({"index": r.index, "id": r.id.to_string(), "actor": r.actor,
+            let recs: Vec<Value> = e
+                .history()
+                .records
+                .iter()
+                .rev()
+                .take(limit)
+                .map(|r| {
+                    json!({"index": r.index, "id": r.id.to_string(), "actor": r.actor,
                        "label": r.label, "undone": r.undone,
                        "commands": r.commands.len(),
                        "ops": r.ops.iter().map(|o| o.describe()).collect::<Vec<_>>()})
-            }).collect();
+                })
+                .collect();
             print(json_out, &json!({"transactions": recs}), |v| {
                 out::header("History (newest first)");
                 for t in v["transactions"].as_array().unwrap() {
-                    let flag = if t["undone"].as_bool().unwrap() { " (undone)" } else { "" };
-                    println!("  #{:<3} {:<20} {}{}", t["index"], t["actor"], t["label"].as_str().unwrap(), flag);
+                    let flag = if t["undone"].as_bool().unwrap() {
+                        " (undone)"
+                    } else {
+                        ""
+                    };
+                    println!(
+                        "  #{:<3} {:<20} {}{}",
+                        t["index"],
+                        t["actor"],
+                        t["label"].as_str().unwrap(),
+                        flag
+                    );
                     for op in t["ops"].as_array().unwrap() {
                         println!("        • {}", op.as_str().unwrap());
                     }
@@ -156,23 +203,27 @@ pub fn run(cmd: Cmd, json_out: bool) -> Result<(), Box<dyn std::error::Error>> {
             let mut e = open(&file)?;
             let id = e.undo()?;
             e.save()?;
-            print(json_out, &json!({"undone": id.map(|t| t.to_string())}), |v| {
-                match v["undone"].as_str() {
+            print(
+                json_out,
+                &json!({"undone": id.map(|t| t.to_string())}),
+                |v| match v["undone"].as_str() {
                     Some(t) => println!("undone transaction {t}"),
                     None => println!("nothing to undo"),
-                }
-            });
+                },
+            );
         }
         Cmd::Redo { file } => {
             let mut e = open(&file)?;
             let id = e.redo()?;
             e.save()?;
-            print(json_out, &json!({"redone": id.map(|t| t.to_string())}), |v| {
-                match v["redone"].as_str() {
+            print(
+                json_out,
+                &json!({"redone": id.map(|t| t.to_string())}),
+                |v| match v["redone"].as_str() {
                     Some(t) => println!("redone transaction {t}"),
                     None => println!("nothing to redo"),
-                }
-            });
+                },
+            );
         }
         Cmd::Diff { a, b } => {
             let ea = open(&a)?;
@@ -189,17 +240,19 @@ pub fn run(cmd: Cmd, json_out: bool) -> Result<(), Box<dyn std::error::Error>> {
         }
         Cmd::Agent { file, goal, agent } => {
             let mut e = open(&file)?;
-            let report = e.run_capability(
-                "agent.run",
-                json!({"goal": goal, "agent": agent}),
-            )?;
+            let report = e.run_capability("agent.run", json!({"goal": goal, "agent": agent}))?;
             e.save()?;
             print(json_out, &report, |r| {
                 out::header("Agent run");
                 out::kv("status", r["status"].as_str().unwrap_or(""));
                 out::kv("summary", r["summary"].as_str().unwrap_or(""));
                 for s in r["steps"].as_array().into_iter().flatten() {
-                    println!("  {} {} — {}", s["index"], s["command"].as_str().unwrap(), s["note"].as_str().unwrap());
+                    println!(
+                        "  {} {} — {}",
+                        s["index"],
+                        s["command"].as_str().unwrap(),
+                        s["note"].as_str().unwrap()
+                    );
                 }
                 for v in r["verification"].as_array().into_iter().flatten() {
                     println!("  ✓ {}", v.as_str().unwrap());
@@ -210,9 +263,13 @@ pub fn run(cmd: Cmd, json_out: bool) -> Result<(), Box<dyn std::error::Error>> {
             let e = open(&file)?;
             let text = serde_json::to_string_pretty(e.project())?;
             std::fs::write(&outp, &text)?;
-            print(json_out, &json!({"path": outp.display().to_string()}), |v| {
-                println!("exported → {}", v["path"]);
-            });
+            print(
+                json_out,
+                &json!({"path": outp.display().to_string()}),
+                |v| {
+                    println!("exported → {}", v["path"]);
+                },
+            );
         }
         Cmd::Mcp { file } => {
             let e = open(&file)?;
@@ -231,10 +288,16 @@ pub fn run(cmd: Cmd, json_out: bool) -> Result<(), Box<dyn std::error::Error>> {
             worldos_rpc::ws::serve_ws(svc, &format!("127.0.0.1:{port}"))?;
         }
         Cmd::Doctor => doctor(json_out)?,
-        Cmd::Plugin { sub: PluginCmd::List } => {
-            print(json_out, &json!({"plugins": [], "note": "plugin loader lands with Forge"}), |_| {
-                println!("no external plugins loaded (builtin domains only)");
-            });
+        Cmd::Plugin {
+            sub: PluginCmd::List,
+        } => {
+            print(
+                json_out,
+                &json!({"plugins": [], "note": "plugin loader lands with Forge"}),
+                |_| {
+                    println!("no external plugins loaded (builtin domains only)");
+                },
+            );
         }
         Cmd::Version => println!("worldos {}", env!("CARGO_PKG_VERSION")),
     }
@@ -253,10 +316,10 @@ fn register_extras(e: &mut Engine) {
 }
 
 fn resolve(e: &Engine, key: &str) -> Option<worldos_kernel::ObjectId> {
-    if let Ok(id) = key.parse() {
-        if e.get_object(id).is_some() {
-            return Some(id);
-        }
+    if let Ok(id) = key.parse()
+        && e.get_object(id).is_some()
+    {
+        return Some(id);
     }
     e.find_object(key).map(|o| o.id)
 }
@@ -280,7 +343,10 @@ fn name_of(p: &worldos_kernel::Project, id: &str) -> String {
 }
 
 fn indent(s: &str) -> String {
-    s.lines().map(|l| format!("      {l}")).collect::<Vec<_>>().join("\n")
+    s.lines()
+        .map(|l| format!("      {l}"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn print<T: serde::Serialize>(json: bool, v: &T, human: impl FnOnce(&T)) {
@@ -292,12 +358,20 @@ fn print<T: serde::Serialize>(json: bool, v: &T, human: impl FnOnce(&T)) {
 }
 
 fn doctor(json_out: bool) -> Result<(), Box<dyn std::error::Error>> {
-    let checks = vec![
-        ("rustc", which("rustc"), "Rust toolchain for building WorldOS"),
+    let checks = [
+        (
+            "rustc",
+            which("rustc"),
+            "Rust toolchain for building WorldOS",
+        ),
         ("cargo", which("cargo"), "Rust package manager"),
         ("node", which("node"), "Node.js for the desktop UI + TS SDK"),
         ("npm", which("npm"), "Node package manager"),
-        ("sqlite3", which("sqlite3"), "optional: inspect .worldos files directly"),
+        (
+            "sqlite3",
+            which("sqlite3"),
+            "optional: inspect .worldos files directly",
+        ),
     ];
     let rows: Vec<Value> = checks.iter().map(|(name, path, why)| {
         json!({"tool": name, "found": path.is_some(), "path": path, "purpose": why})
@@ -305,8 +379,16 @@ fn doctor(json_out: bool) -> Result<(), Box<dyn std::error::Error>> {
     print(json_out, &json!({"checks": rows}), |v| {
         out::header("worldos doctor");
         for c in v["checks"].as_array().unwrap() {
-            let mark = if c["found"].as_bool().unwrap() { "✓" } else { "✗" };
-            println!("  {mark} {:<8} {}", c["tool"].as_str().unwrap(), c["purpose"].as_str().unwrap());
+            let mark = if c["found"].as_bool().unwrap() {
+                "✓"
+            } else {
+                "✗"
+            };
+            println!(
+                "  {mark} {:<8} {}",
+                c["tool"].as_str().unwrap(),
+                c["purpose"].as_str().unwrap()
+            );
         }
     });
     Ok(())

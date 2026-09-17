@@ -55,7 +55,9 @@ pub struct PermissionSet {
 
 impl PermissionSet {
     pub fn all() -> Self {
-        Self { grants: BTreeSet::from([Permission::new("*")]) }
+        Self {
+            grants: BTreeSet::from([Permission::new("*")]),
+        }
     }
     pub fn read_only() -> Self {
         Self {

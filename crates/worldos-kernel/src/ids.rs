@@ -11,7 +11,9 @@ use ulid::Ulid;
 macro_rules! define_id {
     ($name:ident, $doc:literal) => {
         #[doc = $doc]
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+        #[derive(
+            Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+        )]
         #[serde(transparent)]
         pub struct $name(pub Ulid);
 
@@ -49,7 +51,10 @@ macro_rules! define_id {
 }
 
 define_id!(ProjectId, "Unique identifier for a project.");
-define_id!(ObjectId, "Unique identifier for an object in the project graph.");
+define_id!(
+    ObjectId,
+    "Unique identifier for an object in the project graph."
+);
 define_id!(RelationId, "Unique identifier for a typed relation edge.");
 define_id!(CommandId, "Unique identifier for an executed command.");
 define_id!(TransactionId, "Unique identifier for a transaction.");

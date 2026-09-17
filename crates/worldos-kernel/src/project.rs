@@ -7,7 +7,7 @@
 use crate::delta::StateOp;
 use crate::error::KernelError;
 use crate::ids::{ObjectId, ProjectId, RelationId};
-use crate::model::{now_ms, Object, Relation};
+use crate::model::{Object, Relation, now_ms};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -54,10 +54,14 @@ impl Project {
         self.objects.values().find(|o| o.name == name)
     }
     pub fn objects_of_type(&self, type_id: &str) -> impl Iterator<Item = &Object> {
-        self.objects.values().filter(move |o| o.type_id.0 == type_id)
+        self.objects
+            .values()
+            .filter(move |o| o.type_id.0 == type_id)
     }
     pub fn relations_of(&self, id: ObjectId) -> impl Iterator<Item = &Relation> {
-        self.relations.values().filter(move |r| r.from == id || r.to == id)
+        self.relations
+            .values()
+            .filter(move |r| r.from == id || r.to == id)
     }
     pub fn relations_from(&self, id: ObjectId) -> impl Iterator<Item = &Relation> {
         self.relations.values().filter(move |r| r.from == id)
@@ -85,7 +89,10 @@ impl Project {
             .filter(|r| r.type_id == crate::known::rel::CONTAINS)
             .map(|r| r.to)
             .collect();
-        self.objects.values().filter(|o| !contained.contains(&o.id)).collect()
+        self.objects
+            .values()
+            .filter(|o| !contained.contains(&o.id))
+            .collect()
     }
     pub fn sorted_objects(&self) -> Vec<&Object> {
         let mut v: Vec<&Object> = self.objects.values().collect();

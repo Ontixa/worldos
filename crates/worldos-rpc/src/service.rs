@@ -2,11 +2,11 @@
 //! every SDK talks to. Maps JSON-RPC methods onto `Engine` operations —
 //! no separate business logic lives here.
 
-use crate::proto::{RpcRequest, RpcResponse, INVALID_PARAMS, METHOD_NOT_FOUND};
-use serde_json::{json, Value};
+use crate::proto::{INVALID_PARAMS, METHOD_NOT_FOUND, RpcRequest, RpcResponse};
+use serde_json::{Value, json};
 use std::path::PathBuf;
 use std::sync::Mutex;
-use worldos_engine::{diff_projects, Engine};
+use worldos_engine::{Engine, diff_projects};
 
 pub struct RpcService {
     engine: Mutex<Engine>,
@@ -17,7 +17,9 @@ impl RpcService {
         // interfaces share one engine; agent.run is registered here so RPC
         // clients (MCP, SDK, CLI) all reach the same agent capability
         engine.register_capability(std::sync::Arc::new(worldos_agent::AgentRun));
-        Self { engine: Mutex::new(engine) }
+        Self {
+            engine: Mutex::new(engine),
+        }
     }
     /// Open or create the project bound at startup.
     pub fn for_project(path: PathBuf) -> Result<Self, worldos_engine::EngineError> {
@@ -28,16 +30,21 @@ impl RpcService {
         let id = req.id.clone();
         match self.dispatch(&req.method, &req.params) {
             Ok(v) => RpcResponse::ok(id, v),
-            Err(DispatchError::UnknownMethod) => {
-                RpcResponse::err(id, METHOD_NOT_FOUND, format!("unknown method {}", req.method))
-            }
+            Err(DispatchError::UnknownMethod) => RpcResponse::err(
+                id,
+                METHOD_NOT_FOUND,
+                format!("unknown method {}", req.method),
+            ),
             Err(DispatchError::BadParams(m)) => RpcResponse::err(id, INVALID_PARAMS, m),
             Err(DispatchError::App(m)) => RpcResponse::app_err(id, m),
         }
     }
 
     fn dispatch(&self, method: &str, params: &Value) -> Result<Value, DispatchError> {
-        let mut engine = self.engine.lock().map_err(|_| DispatchError::app("poisoned"))?;
+        let mut engine = self
+            .engine
+            .lock()
+            .map_err(|_| DispatchError::app("poisoned"))?;
         let p = |k: &str| params.get(k).cloned().unwrap_or(Value::Null);
         match method {
             // ----- project --------------------------------------------
@@ -93,8 +100,10 @@ impl RpcService {
                 let edges: Vec<Value> = pr
                     .relations
                     .values()
-                    .map(|r| json!({"id": r.id.to_string(), "type": r.type_id,
-                                    "from": r.from.to_string(), "to": r.to.to_string()}))
+                    .map(|r| {
+                        json!({"id": r.id.to_string(), "type": r.type_id,
+                                    "from": r.from.to_string(), "to": r.to.to_string()})
+                    })
                     .collect();
                 Ok(json!({"nodes": nodes, "edges": edges}))
             }
@@ -104,8 +113,10 @@ impl RpcService {
                 let out: Vec<Value> = engine
                     .search(&q)
                     .iter()
-                    .map(|o| json!({"id": o.id.to_string(), "name": o.name,
-                                    "type": o.type_id, "tags": o.tags}))
+                    .map(|o| {
+                        json!({"id": o.id.to_string(), "name": o.name,
+                                    "type": o.type_id, "tags": o.tags})
+                    })
                     .collect();
                 Ok(json!({"results": out}))
             }
@@ -137,8 +148,9 @@ impl RpcService {
             }
 
             // ----- commands / capabilities ------------------------------
-            "command.list" => Ok(serde_json::to_value(engine.command_schemas())
-                .map_err(DispatchError::app)?),
+            "command.list" => {
+                Ok(serde_json::to_value(engine.command_schemas()).map_err(DispatchError::app)?)
+            }
             "command.execute" => {
                 let tyv = p("type");
                 let ty = tyv.as_str().ok_or(DispatchError::bad("missing type"))?;
@@ -152,7 +164,9 @@ impl RpcService {
                 let capv = p("id");
                 let cap = capv.as_str().ok_or(DispatchError::bad("missing id"))?;
                 let input = p("input");
-                Ok(engine.run_capability(cap, input).map_err(DispatchError::app)?)
+                Ok(engine
+                    .run_capability(cap, input)
+                    .map_err(DispatchError::app)?)
             }
 
             // ----- history -------------------------------------------------
@@ -204,10 +218,10 @@ impl RpcService {
 }
 
 fn resolve(engine: &Engine, params: &Value) -> Option<worldos_kernel::ObjectId> {
-    if let Some(id) = params.get("id").and_then(|v| v.as_str()) {
-        if let Ok(oid) = id.parse() {
-            return Some(oid);
-        }
+    if let Some(id) = params.get("id").and_then(|v| v.as_str())
+        && let Ok(oid) = id.parse()
+    {
+        return Some(oid);
     }
     params
         .get("name")

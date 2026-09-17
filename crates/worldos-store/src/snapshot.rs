@@ -18,6 +18,10 @@ pub struct Snapshot {
 
 impl Snapshot {
     pub fn new(project: Project, history: History) -> Self {
-        Self { format_version: FORMAT_VERSION, project, history }
+        Self {
+            format_version: FORMAT_VERSION,
+            project,
+            history,
+        }
     }
 }

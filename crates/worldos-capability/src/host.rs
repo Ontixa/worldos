@@ -15,8 +15,7 @@ pub trait CapabilityHost {
 
     /// Execute a command as this host's actor. Joins the currently open
     /// transaction when one exists, otherwise runs as its own transaction.
-    fn run_command(&mut self, command_type: &str, input: Value)
-        -> Result<Value, CapabilityError>;
+    fn run_command(&mut self, command_type: &str, input: Value) -> Result<Value, CapabilityError>;
 
     /// Execute a command as a specific actor (e.g. an agent identity).
     fn run_command_as(
@@ -30,11 +29,7 @@ pub trait CapabilityHost {
     /// their actions into one undoable transaction).
     fn begin_transaction(&mut self, label: &str) -> Result<(), CapabilityError>;
     /// Begin a transaction attributed to a specific actor (e.g. an agent).
-    fn begin_transaction_as(
-        &mut self,
-        actor: &Actor,
-        label: &str,
-    ) -> Result<(), CapabilityError>;
+    fn begin_transaction_as(&mut self, actor: &Actor, label: &str) -> Result<(), CapabilityError>;
     fn commit_transaction(&mut self) -> Result<(), CapabilityError>;
     fn rollback_transaction(&mut self) -> Result<(), CapabilityError>;
     fn in_transaction(&self) -> bool;
@@ -48,10 +43,10 @@ pub trait CapabilityHost {
 
     /// Resolve an object by id-or-name helper string.
     fn resolve_object(&self, id_or_name: &str) -> Option<worldos_kernel::ObjectId> {
-        if let Ok(id) = id_or_name.parse() {
-            if self.project().get(id).is_some() {
-                return Some(id);
-            }
+        if let Ok(id) = id_or_name.parse()
+            && self.project().get(id).is_some()
+        {
+            return Some(id);
         }
         self.project().find_by_name(id_or_name).map(|o| o.id)
     }

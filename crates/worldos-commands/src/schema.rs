@@ -40,7 +40,7 @@ impl CommandSchema {
 
 /// Convenience constructors for common input schema shapes.
 pub mod props {
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     /// `{ "type": "object", "required": [...], "properties": {...} }`
     pub fn object(required: &[&str], properties: Value) -> Value {

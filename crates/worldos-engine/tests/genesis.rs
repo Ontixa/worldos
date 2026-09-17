@@ -61,7 +61,10 @@ fn genesis_acceptance_scenario() {
         // sensor-housing sits next to reference-cube on +x
         let ref_pos = pos_of(&e, "reference-cube");
         let new_pos = pos_of(&e, "sensor-housing");
-        assert!(new_pos[0] > ref_pos[0], "housing should be placed beside the reference");
+        assert!(
+            new_pos[0] > ref_pos[0],
+            "housing should be placed beside the reference"
+        );
 
         // requirement evaluated → pass
         let req = e.find_object("sensor housing must exist").unwrap();
@@ -69,8 +72,12 @@ fn genesis_acceptance_scenario() {
         assert_eq!(status["status"], "pass");
 
         // history records human + agent transactions
-        let labels: Vec<&str> =
-            e.history().records.iter().map(|r| r.label.as_str()).collect();
+        let labels: Vec<&str> = e
+            .history()
+            .records
+            .iter()
+            .map(|r| r.label.as_str())
+            .collect();
         assert!(labels.iter().any(|l| l.contains("agent:genesis-bot")));
         let agent_txn = e
             .history()
@@ -99,8 +106,14 @@ fn genesis_acceptance_scenario() {
         let undone = e.undo().unwrap().expect("undo must work");
         let rec = e.history().records.iter().find(|r| r.id == undone).unwrap();
         assert!(rec.label.contains("agent:"));
-        assert!(e.find_object("sensor-housing").is_none(), "agent cube reverted");
-        assert!(e.find_object("reference-cube").is_some(), "reference survives");
+        assert!(
+            e.find_object("sensor-housing").is_none(),
+            "agent cube reverted"
+        );
+        assert!(
+            e.find_object("reference-cube").is_some(),
+            "reference survives"
+        );
         assert!(e.project().objects.len() < before);
 
         // redo restores it
@@ -122,10 +135,13 @@ fn pos_of(e: &Engine, name: &str) -> [f64; 3] {
 #[test]
 fn transaction_rollback_keeps_state_clean() {
     let mut e = Engine::new("t");
-    e.execute("object.create", json!({"type": types::NOTE, "name": "a"})).unwrap();
+    e.execute("object.create", json!({"type": types::NOTE, "name": "a"}))
+        .unwrap();
     e.begin_transaction("multi").unwrap();
-    e.execute("object.create", json!({"type": types::NOTE, "name": "b"})).unwrap();
-    e.execute("object.create", json!({"type": types::NOTE, "name": "c"})).unwrap();
+    e.execute("object.create", json!({"type": types::NOTE, "name": "b"}))
+        .unwrap();
+    e.execute("object.create", json!({"type": types::NOTE, "name": "c"}))
+        .unwrap();
     e.rollback_transaction().unwrap();
     assert_eq!(e.project().objects.len(), 1);
     assert!(e.find_object("a").is_some());
@@ -135,16 +151,31 @@ fn transaction_rollback_keeps_state_clean() {
 fn failed_command_is_atomic() {
     let mut e = Engine::new("t");
     // object.delete on missing object fails after resolving — nothing corrupt
-    assert!(e.execute("object.delete", json!({"name": "ghost"})).is_err());
+    assert!(
+        e.execute("object.delete", json!({"name": "ghost"}))
+            .is_err()
+    );
     assert_eq!(e.project().objects.len(), 0);
-    assert_eq!(e.history().records.len(), 0, "failed command leaves no record");
+    assert_eq!(
+        e.history().records.len(),
+        0,
+        "failed command leaves no record"
+    );
 }
 
 #[test]
 fn undo_redo_round_trip() {
     let mut e = Engine::new("t");
-    e.execute("geometry.create_primitive", json!({"kind": "cube", "name": "a"})).unwrap();
-    e.execute("geometry.create_primitive", json!({"kind": "sphere", "name": "b"})).unwrap();
+    e.execute(
+        "geometry.create_primitive",
+        json!({"kind": "cube", "name": "a"}),
+    )
+    .unwrap();
+    e.execute(
+        "geometry.create_primitive",
+        json!({"kind": "sphere", "name": "b"}),
+    )
+    .unwrap();
     assert_eq!(e.project().objects.len(), 2);
     e.undo().unwrap();
     assert!(e.find_object("b").is_none());

@@ -34,20 +34,20 @@ pub fn search<'a>(project: &'a Project, q: &SearchQuery) -> Vec<&'a Object> {
                     return false;
                 }
             }
-            if let Some(ty) = &q.type_id {
-                if o.type_id.0 != *ty {
-                    return false;
-                }
+            if let Some(ty) = &q.type_id
+                && o.type_id.0 != *ty
+            {
+                return false;
             }
-            if let Some(tag) = &q.tag {
-                if !o.tags.iter().any(|t| t == tag) {
-                    return false;
-                }
+            if let Some(tag) = &q.tag
+                && !o.tags.iter().any(|t| t == tag)
+            {
+                return false;
             }
-            if let Some(c) = &q.has_component {
-                if !o.components.contains_key(c) {
-                    return false;
-                }
+            if let Some(c) = &q.has_component
+                && !o.components.contains_key(c)
+            {
+                return false;
             }
             true
         })

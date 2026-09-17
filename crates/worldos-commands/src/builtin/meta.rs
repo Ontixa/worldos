@@ -2,8 +2,8 @@
 
 use crate::error::CommandError;
 use crate::handler::{CommandContext, CommandHandler};
-use crate::schema::{props, CommandSchema};
-use serde_json::{json, Value};
+use crate::schema::{CommandSchema, props};
+use serde_json::{Value, json};
 use worldos_kernel::delta::StateOp;
 
 pub struct ProjectRename;
@@ -38,7 +38,10 @@ impl CommandHandler for ProjectSetMeta {
             "project.set_meta",
             "project",
             "Set a project settings key",
-            props::object(&["key", "value"], json!({"key": {"type": "string"}, "value": {}})),
+            props::object(
+                &["key", "value"],
+                json!({"key": {"type": "string"}, "value": {}}),
+            ),
         )
     }
     fn execute(&self, ctx: &mut CommandContext, input: &Value) -> Result<Value, CommandError> {

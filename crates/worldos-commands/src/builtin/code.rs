@@ -2,8 +2,8 @@
 
 use crate::error::CommandError;
 use crate::handler::{CommandContext, CommandHandler};
-use crate::schema::{props, CommandSchema};
-use serde_json::{json, Value};
+use crate::schema::{CommandSchema, props};
+use serde_json::{Value, json};
 use worldos_kernel::known::{components, types};
 
 pub struct CodeCreateFile;
@@ -28,7 +28,10 @@ impl CommandHandler for CodeCreateFile {
     }
     fn execute(&self, ctx: &mut CommandContext, input: &Value) -> Result<Value, CommandError> {
         let source = input.get("source").and_then(|s| s.as_str()).unwrap_or("");
-        let language = input.get("language").and_then(|l| l.as_str()).unwrap_or("text");
+        let language = input
+            .get("language")
+            .and_then(|l| l.as_str())
+            .unwrap_or("text");
         let path = input.get("path").and_then(|p| p.as_str()).unwrap_or("");
         let mut args = json!({
             "type": types::CODE_FILE,

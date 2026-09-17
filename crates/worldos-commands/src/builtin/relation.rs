@@ -3,8 +3,8 @@
 use super::object::resolve_object;
 use crate::error::CommandError;
 use crate::handler::{CommandContext, CommandHandler};
-use crate::schema::{props, CommandSchema};
-use serde_json::{json, Value};
+use crate::schema::{CommandSchema, props};
+use serde_json::{Value, json};
 use worldos_kernel::ids::RelationId;
 use worldos_kernel::model::Relation;
 
@@ -44,7 +44,9 @@ fn resolve_endpoint(
     ctx: &CommandContext,
     v: &Value,
 ) -> Result<worldos_kernel::ids::ObjectId, CommandError> {
-    let s = v.as_str().ok_or_else(|| CommandError::Failed("endpoint must be string".into()))?;
+    let s = v
+        .as_str()
+        .ok_or_else(|| CommandError::Failed("endpoint must be string".into()))?;
     if s.parse::<worldos_kernel::ids::ObjectId>().is_ok() {
         resolve_object(ctx, &json!({"id": s}))
     } else {

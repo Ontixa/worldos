@@ -2,10 +2,8 @@
 //! Registered alongside builtin capabilities by every interface.
 
 use crate::runtime::AgentRuntime;
-use serde_json::{json, Value};
-use worldos_capability::{
-    Capability, CapabilityDescriptor, CapabilityError, CapabilityHost,
-};
+use serde_json::{Value, json};
+use worldos_capability::{Capability, CapabilityDescriptor, CapabilityError, CapabilityHost};
 
 pub struct AgentRun;
 
@@ -37,7 +35,10 @@ impl Capability for AgentRun {
         let goal = input["goal"]
             .as_str()
             .ok_or_else(|| CapabilityError::Failed("missing `goal`".into()))?;
-        let agent = input.get("agent").and_then(|a| a.as_str()).unwrap_or("assistant");
+        let agent = input
+            .get("agent")
+            .and_then(|a| a.as_str())
+            .unwrap_or("assistant");
         let rt = AgentRuntime::default();
         let report = rt.run(host, goal, agent);
         serde_json::to_value(report).map_err(CapabilityError::Serde)

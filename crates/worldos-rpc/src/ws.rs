@@ -1,11 +1,11 @@
 //! WebSocket JSON-RPC server (`worldos serve`) — the transport used by
 //! the TypeScript SDK and, optionally, a future web client.
 
-use crate::proto::{RpcRequest, RpcResponse, PARSE_ERROR};
+use crate::proto::{PARSE_ERROR, RpcRequest, RpcResponse};
 use crate::service::RpcService;
 use std::net::TcpListener;
 use std::sync::Arc;
-use tungstenite::{accept, Message};
+use tungstenite::{Message, accept};
 
 /// Blocking WS server; one thread per connection, all sharing the engine.
 pub fn serve_ws(service: Arc<RpcService>, addr: &str) -> std::io::Result<()> {

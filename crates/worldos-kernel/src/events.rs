@@ -8,10 +8,23 @@ use serde_json::Value;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum EngineEvent {
-    ObjectCreated { object_id: ObjectId, type_id: String, name: String },
-    ObjectUpdated { object_id: ObjectId },
-    ObjectDeleted { object_id: ObjectId, name: String },
-    CommandExecuted { command_id: CommandId, command_type: String, actor: ActorId },
+    ObjectCreated {
+        object_id: ObjectId,
+        type_id: String,
+        name: String,
+    },
+    ObjectUpdated {
+        object_id: ObjectId,
+    },
+    ObjectDeleted {
+        object_id: ObjectId,
+        name: String,
+    },
+    CommandExecuted {
+        command_id: CommandId,
+        command_type: String,
+        actor: ActorId,
+    },
     TransactionCommitted {
         transaction_id: TransactionId,
         actor: ActorId,
@@ -19,15 +32,36 @@ pub enum EngineEvent {
         command_count: usize,
         affected: Vec<ObjectId>,
     },
-    TransactionUndone { transaction_id: TransactionId },
-    TransactionRedone { transaction_id: TransactionId },
-    ValidationCompleted { errors: usize, warnings: usize },
-    AgentRunStarted { run_id: String, goal: String },
-    AgentRunFinished { run_id: String, status: String, summary: String },
-    ProjectSaved { path: String },
-    ProjectLoaded { path: String },
+    TransactionUndone {
+        transaction_id: TransactionId,
+    },
+    TransactionRedone {
+        transaction_id: TransactionId,
+    },
+    ValidationCompleted {
+        errors: usize,
+        warnings: usize,
+    },
+    AgentRunStarted {
+        run_id: String,
+        goal: String,
+    },
+    AgentRunFinished {
+        run_id: String,
+        status: String,
+        summary: String,
+    },
+    ProjectSaved {
+        path: String,
+    },
+    ProjectLoaded {
+        path: String,
+    },
     /// Generic structured event for extensions.
-    Custom { topic: String, data: Value },
+    Custom {
+        topic: String,
+        data: Value,
+    },
 }
 
 impl EngineEvent {
