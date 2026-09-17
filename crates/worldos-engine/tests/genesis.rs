@@ -187,6 +187,24 @@ fn undo_redo_round_trip() {
 }
 
 #[test]
+fn new_write_invalidates_redo() {
+    let mut e = Engine::new("t");
+    e.execute("object.create", json!({"type": types::NOTE, "name": "a"}))
+        .unwrap();
+    e.execute("object.create", json!({"type": types::NOTE, "name": "b"}))
+        .unwrap();
+    e.undo().unwrap(); // remove b
+    assert!(!e.can_redo() || e.history().records.iter().any(|r| r.undone));
+    // a fresh write must truncate the redo tail
+    e.execute("object.create", json!({"type": types::NOTE, "name": "c"}))
+        .unwrap();
+    assert!(!e.can_redo(), "redo tail must be truncated by new write");
+    e.redo().unwrap();
+    assert!(e.find_object("b").is_none(), "b stays gone");
+    assert!(e.find_object("c").is_some());
+}
+
+#[test]
 fn permissions_are_enforced() {
     let mut e = Engine::new("t");
     let mut reader = worldos_kernel::Actor::human("reader");
