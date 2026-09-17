@@ -1,0 +1,23 @@
+[package]
+name = "worldos-engine"
+description = "WorldOS engine facade: sessions, command orchestration, history, validation, diff"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+worldos-kernel = { path = "../worldos-kernel" }
+worldos-commands = { path = "../worldos-commands" }
+worldos-store = { path = "../worldos-store" }
+worldos-capability = { path = "../worldos-capability" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+ulid.workspace = true
+time.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+worldos-agent = { path = "../worldos-agent" }
+serde_json.workspace = true

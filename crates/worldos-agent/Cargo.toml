@@ -1,0 +1,26 @@
+[package]
+name = "worldos-agent"
+description = "WorldOS agent runtime: planner, executor, verifier, model providers, budgets"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+worldos-kernel = { path = "../worldos-kernel" }
+worldos-commands = { path = "../worldos-commands" }
+worldos-engine = { path = "../worldos-engine" }
+worldos-capability = { path = "../worldos-capability" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+ulid.workspace = true
+time.workspace = true
+ureq = { workspace = true, optional = true }
+
+[features]
+default = []
+llm = ["dep:ureq"]
+
+[dev-dependencies]
+tempfile.workspace = true

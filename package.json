@@ -1,0 +1,20 @@
+{
+  "name": "worldos",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The open AI-native operating system for creating the digital and physical world.",
+  "workspaces": [
+    "packages/*",
+    "apps/desktop"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "dev:desktop": "cargo tauri dev",
+    "sdk:build": "npm run build -w @worldos/sdk"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

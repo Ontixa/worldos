@@ -1,0 +1,15 @@
+[package]
+name = "worldos-commands"
+description = "WorldOS command system: envelopes, schemas, bus, transactions, history"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+worldos-kernel = { path = "../worldos-kernel" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+ulid.workspace = true
+time.workspace = true

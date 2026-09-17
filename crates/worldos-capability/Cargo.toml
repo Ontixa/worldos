@@ -1,0 +1,14 @@
+[package]
+name = "worldos-capability"
+description = "WorldOS capability registry, providers, permission guard, builtin capabilities"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+worldos-kernel = { path = "../worldos-kernel" }
+worldos-commands = { path = "../worldos-commands" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true

@@ -1,0 +1,38 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/worldos-kernel",
+    "crates/worldos-commands",
+    "crates/worldos-store",
+    "crates/worldos-capability",
+    "crates/worldos-engine",
+    "crates/worldos-agent",
+    "crates/worldos-rpc",
+    "crates/worldos-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MPL-2.0"
+repository = "https://github.com/worldos/worldos"
+authors = ["WorldOS Contributors"]
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+thiserror = "2"
+ulid = { version = "1", features = ["serde"] }
+time = { version = "0.3", features = ["serde", "formatting", "macros"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+tungstenite = "0.26"
+clap = { version = "4", features = ["derive", "cargo"] }
+ureq = "3"
+tempfile = "3"
+assert_cmd = "2"
+predicates = "3"
+
+[profile.dev.package."*"]
+opt-level = 2
