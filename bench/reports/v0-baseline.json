@@ -1,0 +1,1492 @@
+{
+  "format_version": 1,
+  "generated_at": "2026-09-18T17:47:18.5317412Z",
+  "kernel": "occt-8.0.1-cadrum",
+  "tasks": [
+    {
+      "id": "graph-crud",
+      "title": "Object + relation lifecycle through commands",
+      "file": "01-graph-crud.yaml",
+      "passed": true,
+      "duration_ms": 2605,
+      "steps": [
+        {
+          "index": 0,
+          "name": "create a note",
+          "command": "object.create",
+          "input": {
+            "type": "core:note",
+            "name": "memo"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M2TT1X8JKMAK0ES3N8CE8EAF"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "present",
+                "path": "output.id"
+              },
+              "passed": true,
+              "detail": "output.id present = true"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "memo",
+                "path": null,
+                "value": null
+              },
+              "passed": true,
+              "detail": "object `memo` exists"
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "name": "create a second note",
+          "command": "object.create",
+          "input": {
+            "type": "core:note",
+            "name": "memo2"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M2TT1X8KYVDMHXEMFB508YE4"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "name": "delete the second note",
+          "command": "object.delete",
+          "input": {
+            "name": "memo2"
+          },
+          "status": "ok",
+          "output": {
+            "deleted": [
+              {
+                "id": "01M2TT1X8KYVDMHXEMFB508YE4",
+                "name": "memo2"
+              }
+            ]
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_absent",
+                "name": "memo2"
+              },
+              "passed": true,
+              "detail": "object `memo2` absent = true"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "name": "schema rejects malformed input",
+          "command": "object.create",
+          "input": {
+            "name": "missing-type"
+          },
+          "status": "ok",
+          "output": {
+            "error": "invalid input for object.create: $: missing required property `type`"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "error",
+                "contains": null
+              },
+              "passed": true,
+              "detail": "failed as expected: invalid input for object.create: $: missing required property `type`"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "undo-redo",
+      "title": "Transaction undo/redo is exact",
+      "file": "02-undo-redo.yaml",
+      "passed": true,
+      "duration_ms": 2282,
+      "steps": [
+        {
+          "index": 0,
+          "name": "create object",
+          "command": "object.create",
+          "input": {
+            "type": "core:note",
+            "name": "undoable"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M2TT1ZFYN6NGRNNJE80N86NS"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "undoable",
+                "path": null,
+                "value": null
+              },
+              "passed": true,
+              "detail": "object `undoable` exists"
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "name": "undo removes it",
+          "command": "engine.undo",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "undone": "01M2TT1ZFYB6D5WTHX76TCESF5"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_absent",
+                "name": "undoable"
+              },
+              "passed": true,
+              "detail": "object `undoable` absent = true"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "name": "redo restores it",
+          "command": "engine.redo",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "redone": "01M2TT1ZFYB6D5WTHX76TCESF5"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "undoable",
+                "path": null,
+                "value": null
+              },
+              "passed": true,
+              "detail": "object `undoable` exists"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "name": "undo again",
+          "command": "engine.undo",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "undone": "01M2TT1ZFYB6D5WTHX76TCESF5"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_absent",
+                "name": "undoable"
+              },
+              "passed": true,
+              "detail": "object `undoable` absent = true"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "save-reopen",
+      "title": "Project state survives save and reopen",
+      "file": "03-save-reopen.yaml",
+      "passed": true,
+      "duration_ms": 7942,
+      "steps": [
+        {
+          "index": 0,
+          "name": "create a note",
+          "command": "object.create",
+          "input": {
+            "type": "core:note",
+            "name": "persisted"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M2TT22MD4ZH6KCNSA8F283QK"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "name": "save the project",
+          "command": "engine.save",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "saved": true
+          },
+          "duration_ms": 1432,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "name": "reopen from disk",
+          "command": "engine.reopen",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "reopened": "D:\\ytb_tool_temp\\.tmp0rBXo4\\save-reopen.worldos"
+          },
+          "duration_ms": 5,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "persisted",
+                "path": null,
+                "value": null
+              },
+              "passed": true,
+              "detail": "object `persisted` exists"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "name": "save_as to a second file",
+          "command": "engine.save_as",
+          "input": {
+            "file": "moved.worldos"
+          },
+          "status": "ok",
+          "output": {
+            "saved_as": "D:\\ytb_tool_temp\\.tmp0rBXo4\\moved.worldos"
+          },
+          "duration_ms": 3302,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "name": "reopen the moved file",
+          "command": "engine.reopen",
+          "input": {
+            "file": "moved.worldos"
+          },
+          "status": "ok",
+          "output": {
+            "reopened": "D:\\ytb_tool_temp\\.tmp0rBXo4\\moved.worldos"
+          },
+          "duration_ms": 4,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "persisted",
+                "path": null,
+                "value": null
+              },
+              "passed": true,
+              "detail": "object `persisted` exists"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cad-create-measure",
+      "title": "Real OCCT box creation + kernel-verified measure",
+      "file": "04-cad-create-measure.yaml",
+      "passed": true,
+      "duration_ms": 2455,
+      "steps": [
+        {
+          "index": 0,
+          "name": "create a 50x40x20 box",
+          "command": "cad.create_box",
+          "input": {
+            "size_mm": [
+              50.0,
+              40.0,
+              20.0
+            ],
+            "name": "block"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M2TT29NBS8KVP3M00VFCY5G4",
+            "name": "block",
+            "type": "cad:body",
+            "brep": "sha256:84d92d15a8bccd8bd7b6fcf563f1f663c6c1c372cac2b261034a719aad7ec5fc",
+            "measures": {
+              "volume_mm3": 39999.99999999999,
+              "area_mm2": 7599.999999999999,
+              "bbox": {
+                "min_mm": [
+                  -1e-7,
+                  -1e-7,
+                  -1e-7
+                ],
+                "max_mm": [
+                  50.0000001,
+                  40.0000001,
+                  20.0000001
+                ]
+              },
+              "center_mm": [
+                25.0,
+                19.999999999999996,
+                10.000000000000002
+              ]
+            },
+            "topology": {
+              "solids": 1,
+              "faces": 6,
+              "edges": 12,
+              "is_solid": true,
+              "is_valid": true,
+              "edge_ids": [
+                2165257893104,
+                2165257894512,
+                2165257895408,
+                2165257893744,
+                2165257894640,
+                2165257895152,
+                2165257893360,
+                2165257894896,
+                2165257895792,
+                2165257892720,
+                2165257895024,
+                2165257893616
+              ],
+              "face_ids": [
+                2165257908256,
+                2165257905696,
+                2165257907136,
+                2165257908416,
+                2165257907616,
+                2165257907936
+              ]
+            }
+          },
+          "duration_ms": 5,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "present",
+                "path": "output.brep"
+              },
+              "passed": true,
+              "detail": "output.brep present = true"
+            },
+            {
+              "check": {
+                "kind": "approx",
+                "path": "output.measures.volume_mm3",
+                "value": 40000.0,
+                "rel": 0.0001
+              },
+              "passed": true,
+              "detail": "output.measures.volume_mm3 = 39999.99999999999 (want ~40000 rel 0.0001)"
+            },
+            {
+              "check": {
+                "kind": "eq",
+                "path": "output.topology.faces",
+                "value": 6
+              },
+              "passed": true,
+              "detail": "output.topology.faces = Some(Number(6)) (want Number(6))"
+            },
+            {
+              "check": {
+                "kind": "eq",
+                "path": "output.topology.edges",
+                "value": 12
+              },
+              "passed": true,
+              "detail": "output.topology.edges = Some(Number(12)) (want Number(12))"
+            },
+            {
+              "check": {
+                "kind": "eq",
+                "path": "output.topology.is_valid",
+                "value": true
+              },
+              "passed": true,
+              "detail": "output.topology.is_valid = Some(Bool(true)) (want Bool(true))"
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "name": "measure it back through the kernel",
+          "command": "cad.measure",
+          "input": {
+            "object": "block"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M2TT29NBS8KVP3M00VFCY5G4",
+            "measures": {
+              "volume_mm3": 39999.99999999999,
+              "area_mm2": 7599.999999999999,
+              "bbox": {
+                "min_mm": [
+                  -1e-7,
+                  -1e-7,
+                  -1e-7
+                ],
+                "max_mm": [
+                  50.0000001,
+                  40.0000001,
+                  20.0000001
+                ]
+              },
+              "center_mm": [
+                25.0,
+                19.999999999999996,
+                10.000000000000002
+              ]
+            },
+            "topology": {
+              "solids": 1,
+              "faces": 6,
+              "edges": 12,
+              "is_solid": true,
+              "is_valid": true,
+              "edge_ids": [
+                2165257892976,
+                2165257892592,
+                2165257893744,
+                2165257895792,
+                2165257894256,
+                2165257896048,
+                2165257894384,
+                2165257895664,
+                2165257893360,
+                2165257894512,
+                2165257894896,
+                2165257895024
+              ],
+              "face_ids": [
+                2165257907728,
+                2165257909488,
+                2165257910928,
+                2165257908528,
+                2165257908208,
+                2165257908688
+              ]
+            }
+          },
+          "duration_ms": 3,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "approx",
+                "path": "output.measures.volume_mm3",
+                "value": 40000.0,
+                "rel": 0.0001
+              },
+              "passed": true,
+              "detail": "output.measures.volume_mm3 = 39999.99999999999 (want ~40000 rel 0.0001)"
+            },
+            {
+              "check": {
+                "kind": "approx",
+                "path": "output.measures.area_mm2",
+                "value": 7600.0,
+                "rel": 0.0001
+              },
+              "passed": true,
+              "detail": "output.measures.area_mm2 = 7599.999999999999 (want ~7600 rel 0.0001)"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "name": "a non-cad object cannot be measured",
+          "command": "object.create",
+          "input": {
+            "type": "core:note",
+            "name": "notabody"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M2TT29NF8DXDVYZZ2W1K13G1"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "name": "measuring the note fails cleanly",
+          "command": "cad.measure",
+          "input": {
+            "object": "notabody"
+          },
+          "status": "ok",
+          "output": {
+            "error": "command failed: object `notabody` is a `core:note`, not a cad:body"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "error",
+                "contains": "cad:body"
+              },
+              "passed": true,
+              "detail": "error `command failed: object `notabody` is a `core:note`, not a cad:body` contains `cad:body`"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cad-parametric",
+      "title": "Boolean + set_param regeneration + staleness propagation",
+      "file": "05-cad-parametric.yaml",
+      "passed": true,
+      "duration_ms": 2715,
+      "steps": [
+        {
+          "index": 0,
+          "name": "base plate 50x40x20",
+          "command": "cad.create_box",
+          "input": {
+            "size_mm": [
+              50.0,
+              40.0,
+              20.0
+            ],
+            "name": "plate-stock"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M2TT2C9AEQDFP1QS423AXSV1",
+            "name": "plate-stock",
+            "type": "cad:body",
+            "brep": "sha256:84d92d15a8bccd8bd7b6fcf563f1f663c6c1c372cac2b261034a719aad7ec5fc",
+            "measures": {
+              "volume_mm3": 39999.99999999999,
+              "area_mm2": 7599.999999999999,
+              "bbox": {
+                "min_mm": [
+                  -1e-7,
+                  -1e-7,
+                  -1e-7
+                ],
+                "max_mm": [
+                  50.0000001,
+                  40.0000001,
+                  20.0000001
+                ]
+              },
+              "center_mm": [
+                25.0,
+                19.999999999999996,
+                10.000000000000002
+              ]
+            },
+            "topology": {
+              "solids": 1,
+              "faces": 6,
+              "edges": 12,
+              "is_solid": true,
+              "is_valid": true,
+              "edge_ids": [
+                2165257893232,
+                2165257892720,
+                2165257895536,
+                2165257895152,
+                2165257893488,
+                2165257893104,
+                2165257895280,
+                2165257895408,
+                2165257894384,
+                2165257895664,
+                2165257895920,
+                2165257896048
+              ],
+              "face_ids": [
+                2165257909728,
+                2165257908128,
+                2165257909888,
+                2165257908288,
+                2165257910528,
+                2165257909408
+              ]
+            }
+          },
+          "duration_ms": 2,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "name": "drill tool through the middle",
+          "command": "cad.create_cylinder",
+          "input": {
+            "radius_mm": 5.0,
+            "height_mm": 30.0,
+            "position": [
+              25.0,
+              20.0,
+              -5.0
+            ],
+            "name": "drill"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M2TT2C9DNKFPYQ2P3PCBHVTT",
+            "name": "drill",
+            "type": "cad:body",
+            "brep": "sha256:c30274c4f641829993721ad587d2b90f64e64877a6c116aca0f850935e52e340",
+            "measures": {
+              "volume_mm3": 2356.194490192345,
+              "area_mm2": 1099.5574287564277,
+              "bbox": {
+                "min_mm": [
+                  19.9999999,
+                  14.9999999,
+                  -5.0000001
+                ],
+                "max_mm": [
+                  30.0000001,
+                  25.0000001,
+                  25.0000001
+                ]
+              },
+              "center_mm": [
+                25.0,
+                20.0,
+                9.999999999999998
+              ]
+            },
+            "topology": {
+              "solids": 1,
+              "faces": 3,
+              "edges": 3,
+              "is_solid": true,
+              "is_valid": true,
+              "edge_ids": [
+                2165257893616,
+                2165257896048,
+                2165257892592
+              ],
+              "face_ids": [
+                2165257908128,
+                2165257908608,
+                2165257909728
+              ]
+            }
+          },
+          "duration_ms": 2,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "name": "subtract -> plate with a hole",
+          "command": "cad.boolean",
+          "input": {
+            "a": "plate-stock",
+            "b": "drill",
+            "op": "subtract",
+            "name": "plate"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M2TT2C9RWR45YECBPDDCVHN3",
+            "name": "plate",
+            "type": "cad:body",
+            "brep": "sha256:e49cbf75f0deb2ee2dc71062a71e29febf6e5987f594994180d5a375778f84f4",
+            "measures": {
+              "volume_mm3": 38429.2036732051,
+              "area_mm2": 8071.238898038468,
+              "bbox": {
+                "min_mm": [
+                  -1e-7,
+                  -1e-7,
+                  -1e-7
+                ],
+                "max_mm": [
+                  50.0000001,
+                  40.0000001,
+                  20.0000001
+                ]
+              },
+              "center_mm": [
+                25.0,
+                20.0,
+                10.0
+              ]
+            },
+            "topology": {
+              "solids": 1,
+              "faces": 7,
+              "edges": 15,
+              "is_solid": true,
+              "is_valid": true,
+              "edge_ids": [
+                2165257967328,
+                2165257965152,
+                2165257968352,
+                2165257967200,
+                2165257964256,
+                2165257967456,
+                2165257964768,
+                2165257965408,
+                2165257961824,
+                2165257961952,
+                2165257962720,
+                2165257963360,
+                2165257968480,
+                2165257964000,
+                2165257968608
+              ],
+              "face_ids": [
+                2165258515472,
+                2165258516272,
+                2165258515632,
+                2165258515792,
+                2165258515952,
+                2165258516592,
+                2165258516752
+              ]
+            }
+          },
+          "duration_ms": 11,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "approx",
+                "path": "output.measures.volume_mm3",
+                "value": 38429.2,
+                "rel": 0.001
+              },
+              "passed": true,
+              "detail": "output.measures.volume_mm3 = 38429.2036732051 (want ~38429.2 rel 0.001)"
+            },
+            {
+              "check": {
+                "kind": "eq",
+                "path": "output.topology.is_valid",
+                "value": true
+              },
+              "passed": true,
+              "detail": "output.topology.is_valid = Some(Bool(true)) (want Bool(true))"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "name": "widen the stock -> plate goes stale",
+          "command": "cad.set_param",
+          "input": {
+            "object": "plate-stock",
+            "params": {
+              "size_mm": [
+                100.0,
+                40.0,
+                20.0
+              ]
+            }
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M2TT2C9AEQDFP1QS423AXSV1",
+            "brep": "sha256:27bc00737ce9ace685817bf59e51cc46421282c0e9e3738616fb4e8e2bcd0848",
+            "measures": {
+              "volume_mm3": 79999.99999999999,
+              "area_mm2": 13599.999999999998,
+              "bbox": {
+                "min_mm": [
+                  -1e-7,
+                  -1e-7,
+                  -1e-7
+                ],
+                "max_mm": [
+                  100.0000001,
+                  40.0000001,
+                  20.0000001
+                ]
+              },
+              "center_mm": [
+                50.0,
+                19.999999999999996,
+                10.000000000000002
+              ]
+            },
+            "topology": {
+              "solids": 1,
+              "faces": 6,
+              "edges": 12,
+              "is_solid": true,
+              "is_valid": true,
+              "edge_ids": [
+                2165257965280,
+                2165257966560,
+                2165257967840,
+                2165257963488,
+                2165257962848,
+                2165257963872,
+                2165257961568,
+                2165257964256,
+                2165257964000,
+                2165257966176,
+                2165257969376,
+                2165257968224
+              ],
+              "face_ids": [
+                2165257909568,
+                2165257909728,
+                2165257908768,
+                2165257910048,
+                2165257908288,
+                2165257907168
+              ]
+            }
+          },
+          "duration_ms": 2,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "approx",
+                "path": "output.measures.volume_mm3",
+                "value": 80000.0,
+                "rel": 0.0001
+              },
+              "passed": true,
+              "detail": "output.measures.volume_mm3 = 79999.99999999999 (want ~80000 rel 0.0001)"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "plate",
+                "path": "cad:shape.stale",
+                "value": true
+              },
+              "passed": true,
+              "detail": "`plate` cad:shape.stale = Some(Bool(true)) (want Bool(true))"
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "name": "regenerate the stale plate",
+          "command": "cad.regenerate",
+          "input": {
+            "object": "plate"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M2TT2C9RWR45YECBPDDCVHN3",
+            "brep": "sha256:f1c196f392d59b23eed731cb88c8b043f63a00c91cd5d6e02d84cd25b540bc7a",
+            "measures": {
+              "volume_mm3": 78429.20367320509,
+              "area_mm2": 14071.238898038468,
+              "bbox": {
+                "min_mm": [
+                  -1e-7,
+                  -1e-7,
+                  -1e-7
+                ],
+                "max_mm": [
+                  100.0000001,
+                  40.0000001,
+                  20.0000001
+                ]
+              },
+              "center_mm": [
+                50.50070517524953,
+                20.0,
+                10.0
+              ]
+            },
+            "topology": {
+              "solids": 1,
+              "faces": 7,
+              "edges": 15,
+              "is_solid": true,
+              "is_valid": true,
+              "edge_ids": [
+                2165257961952,
+                2165257962080,
+                2165257963616,
+                2165257962976,
+                2165257964256,
+                2165257963360,
+                2165257964768,
+                2165257964896,
+                2165257965024,
+                2165257895280,
+                2165257894768,
+                2165257894896,
+                2165257894128,
+                2165257896176,
+                2165257894384
+              ],
+              "face_ids": [
+                2165258172688,
+                2165258174288,
+                2165258173168,
+                2165258173488,
+                2165258176848,
+                2165258176048,
+                2165258171888
+              ]
+            }
+          },
+          "duration_ms": 19,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "approx",
+                "path": "output.measures.volume_mm3",
+                "value": 78429.2,
+                "rel": 0.001
+              },
+              "passed": true,
+              "detail": "output.measures.volume_mm3 = 78429.20367320509 (want ~78429.2 rel 0.001)"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "plate",
+                "path": "cad:shape.stale",
+                "value": false
+              },
+              "passed": true,
+              "detail": "`plate` cad:shape.stale = Some(Bool(false)) (want Bool(false))"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cad-step-roundtrip",
+      "title": "STEP export -> artifact -> import -> same verified geometry",
+      "file": "06-cad-step-roundtrip.yaml",
+      "passed": true,
+      "duration_ms": 3375,
+      "steps": [
+        {
+          "index": 0,
+          "name": "create a 10mm cube",
+          "command": "cad.create_box",
+          "input": {
+            "size_mm": 10.0,
+            "name": "cube"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M2TT2EY9ZCW0FVRWGJ6K0V03",
+            "name": "cube",
+            "type": "cad:body",
+            "brep": "sha256:b86356eef64ac0587fd9a835422c3045c904a0b52d3913337b3559b0d8fdefc3",
+            "measures": {
+              "volume_mm3": 999.9999999999998,
+              "area_mm2": 599.9999999999999,
+              "bbox": {
+                "min_mm": [
+                  -1e-7,
+                  -1e-7,
+                  -1e-7
+                ],
+                "max_mm": [
+                  10.0000001,
+                  10.0000001,
+                  10.0000001
+                ]
+              },
+              "center_mm": [
+                5.0,
+                5.0,
+                5.0
+              ]
+            },
+            "topology": {
+              "solids": 1,
+              "faces": 6,
+              "edges": 12,
+              "is_solid": true,
+              "is_valid": true,
+              "edge_ids": [
+                2165257894256,
+                2165257893232,
+                2165257894768,
+                2165257893616,
+                2165257893744,
+                2165257895664,
+                2165257894896,
+                2165257895792,
+                2165257894384,
+                2165257895024,
+                2165257892976,
+                2165257893872
+              ],
+              "face_ids": [
+                2165257910688,
+                2165257910848,
+                2165257911008,
+                2165257909888,
+                2165257910208,
+                2165257907168
+              ]
+            }
+          },
+          "duration_ms": 3,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "approx",
+                "path": "output.measures.volume_mm3",
+                "value": 1000.0,
+                "rel": 0.0001
+              },
+              "passed": true,
+              "detail": "output.measures.volume_mm3 = 999.9999999999998 (want ~1000 rel 0.0001)"
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "name": "export STEP to the artifact store",
+          "command": "cad.export_step",
+          "input": {
+            "object": "cube"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M2TT2EY9ZCW0FVRWGJ6K0V03",
+            "step": "sha256:cee5d681e4d535aa69a3b05cf7c5d703e7e65cf6256a50c63b9438b3c917feda",
+            "size_bytes": 15361
+          },
+          "duration_ms": 12,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "present",
+                "path": "output.step"
+              },
+              "passed": true,
+              "detail": "output.step present = true"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "name": "reimport STEP artifact as a new body",
+          "command": "cad.import_step",
+          "input": {
+            "step": "sha256:cee5d681e4d535aa69a3b05cf7c5d703e7e65cf6256a50c63b9438b3c917feda",
+            "name": "cube-re"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M2TT2EZT3J8B31137YGKT66K",
+            "name": "cube-re",
+            "type": "cad:body",
+            "brep": "sha256:fc9162e2b5f01c91d0eb9771333f7b4ea1715e23888c505e416f39070b8c6862",
+            "measures": {
+              "volume_mm3": 999.9999999999998,
+              "area_mm2": 599.9999999999999,
+              "bbox": {
+                "min_mm": [
+                  -1e-7,
+                  -1e-7,
+                  -1e-7
+                ],
+                "max_mm": [
+                  10.0000001,
+                  10.0000001,
+                  10.0000001
+                ]
+              },
+              "center_mm": [
+                5.0,
+                5.0,
+                5.0
+              ]
+            },
+            "topology": {
+              "solids": 1,
+              "faces": 6,
+              "edges": 12,
+              "is_solid": true,
+              "is_valid": true,
+              "edge_ids": [
+                2165260664272,
+                2165260668368,
+                2165260669648,
+                2165260665680,
+                2165260664784,
+                2165260665424,
+                2165260669776,
+                2165260666960,
+                2165260670416,
+                2165260668880,
+                2165260665040,
+                2165260669264
+              ],
+              "face_ids": [
+                2165258074672,
+                2165258073552,
+                2165258069872,
+                2165258075632,
+                2165258070832,
+                2165258071312
+              ]
+            }
+          },
+          "duration_ms": 36,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "approx",
+                "path": "output.measures.volume_mm3",
+                "value": 1000.0,
+                "rel": 0.0001
+              },
+              "passed": true,
+              "detail": "output.measures.volume_mm3 = 999.9999999999998 (want ~1000 rel 0.0001)"
+            },
+            {
+              "check": {
+                "kind": "eq",
+                "path": "output.topology.is_valid",
+                "value": true
+              },
+              "passed": true,
+              "detail": "output.topology.is_valid = Some(Bool(true)) (want Bool(true))"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "name": "save, reopen - artifact refs survive",
+          "command": "engine.save",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "saved": true
+          },
+          "duration_ms": 619,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "name": "reopen project",
+          "command": "engine.reopen",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "reopened": "D:\\ytb_tool_temp\\.tmpIUkBaz\\cad-step-roundtrip.worldos"
+          },
+          "duration_ms": 10,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "cube-re",
+                "path": null,
+                "value": null
+              },
+              "passed": true,
+              "detail": "object `cube-re` exists"
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "name": "imported body still regenerable after reopen",
+          "command": "cad.regenerate",
+          "input": {
+            "object": "cube-re"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M2TT2EZT3J8B31137YGKT66K",
+            "brep": "sha256:fc9162e2b5f01c91d0eb9771333f7b4ea1715e23888c505e416f39070b8c6862",
+            "measures": {
+              "volume_mm3": 999.9999999999998,
+              "area_mm2": 599.9999999999999,
+              "bbox": {
+                "min_mm": [
+                  -1e-7,
+                  -1e-7,
+                  -1e-7
+                ],
+                "max_mm": [
+                  10.0000001,
+                  10.0000001,
+                  10.0000001
+                ]
+              },
+              "center_mm": [
+                5.0,
+                5.0,
+                5.0
+              ]
+            },
+            "topology": {
+              "solids": 1,
+              "faces": 6,
+              "edges": 12,
+              "is_solid": true,
+              "is_valid": true,
+              "edge_ids": [
+                2165260669776,
+                2165260664016,
+                2165260666064,
+                2165260669008,
+                2165260664144,
+                2165260663376,
+                2165260670160,
+                2165260664784,
+                2165260670288,
+                2165260667984,
+                2165260664400,
+                2165260665808
+              ],
+              "face_ids": [
+                2165258071312,
+                2165258073232,
+                2165258073552,
+                2165258069072,
+                2165258069552,
+                2165258069872
+              ]
+            }
+          },
+          "duration_ms": 16,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "approx",
+                "path": "output.measures.volume_mm3",
+                "value": 1000.0,
+                "rel": 0.0001
+              },
+              "passed": true,
+              "detail": "output.measures.volume_mm3 = 999.9999999999998 (want ~1000 rel 0.0001)"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total": 6,
+    "passed": 6,
+    "failed": 0,
+    "duration_ms": 21374
+  }
+}

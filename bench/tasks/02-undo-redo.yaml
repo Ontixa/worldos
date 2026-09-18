@@ -1,0 +1,29 @@
+id: undo-redo
+title: Transaction undo/redo is exact
+steps:
+  - name: create object
+    command: object.create
+    input:
+      type: core:note
+      name: undoable
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: undoable}
+
+  - name: undo removes it
+    command: engine.undo
+    expect:
+      - {kind: ok}
+      - {kind: query_absent, name: undoable}
+
+  - name: redo restores it
+    command: engine.redo
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: undoable}
+
+  - name: undo again
+    command: engine.undo
+    expect:
+      - {kind: ok}
+      - {kind: query_absent, name: undoable}

@@ -1,0 +1,49 @@
+id: cad-step-roundtrip
+title: STEP export -> artifact -> import -> same verified geometry
+steps:
+  - name: create a 10mm cube
+    command: cad.create_box
+    input:
+      size_mm: 10.0
+      name: cube
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 1000}
+
+  - name: export STEP to the artifact store
+    command: cad.export_step
+    input:
+      object: cube
+    save: cube_step
+    expect:
+      - {kind: ok}
+      - {kind: present, path: "output.step"}
+
+  - name: reimport STEP artifact as a new body
+    command: cad.import_step
+    input:
+      step: "${cube_step.step}"
+      name: cube-re
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 1000}
+      - {kind: eq, path: "output.topology.is_valid", value: true}
+
+  - name: save, reopen - artifact refs survive
+    command: engine.save
+    expect:
+      - {kind: ok}
+
+  - name: reopen project
+    command: engine.reopen
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: cube-re}
+
+  - name: imported body still regenerable after reopen
+    command: cad.regenerate
+    input:
+      object: cube-re
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 1000}

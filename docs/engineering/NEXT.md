@@ -3,27 +3,26 @@
 Prioritized, concrete engineering work. Kept short on purpose — this is
 the next ~5 items, not the backlog.
 
-## Now (Forge slice 1: real CAD)
+## Done (Forge slice 1: real CAD) — shipped on main
 
-1. **`worldos-artifact`** — content-addressed store (SHA-256, sidecar
-   `<project>.artifacts/` dir, put/get/exists/verify/gc + corruption
-   tests). Foundation for CAD outputs.
-2. **`worldos-cad` + `worldos-adapter-cadrum`** — `CadKernel` trait over
-   cadrum (OCCT 8.0.1). `cad:operation` recipes + `cad:shape` derived
-   state. Commands: `cad.create_{box,cylinder,sphere}`,
-   `cad.boolean.{union,subtract,intersect}`, `cad.fillet`,
-   `cad.chamfer`, `cad.measure`, `cad.transform`,
-   `cad.import_step`, `cad.export_{step,stl}`. Canonical unit = mm.
-3. **Parametric regeneration** — `cad.set_param` → rebuild → update
-   `cad:shape` → existing staleness machinery propagates.
-4. **Vertical-slice proof** — create → measure → STEP export →
-   reimport → save → reopen → regenerate → same verified result.
+1. ~~`worldos-artifact`~~ — content-addressed store shipped.
+2. ~~`worldos-cad` + `worldos-adapter-cadrum`~~ — all commands live:
+   `cad.create_{box,cylinder,sphere}`, `cad.boolean`, `cad.fillet`,
+   `cad.chamfer`, `cad.transform`, `cad.measure`,
+   `cad.import_step`, `cad.export_{step,stl}`.
+3. ~~Parametric regeneration~~ — `cad.set_param`/`cad.regenerate`
+   replay `cad:operation` recipes; `core:derived-from` edges mark
+   direct dependents `cad:shape.stale`.
+4. ~~Vertical-slice proof~~ — `worldos-engine/tests/cad_vertical.rs`
+   (5 tests: create→measure→STEP→reimport→undo/redo→save→reopen→
+   regenerate; feature chain; save_as artifact migration; failure
+   paths).
 
 ## Next (Forge slice 2: trust & proof)
 
-5. **WorldBench v0** — YAML task format, deterministic runner,
-   non-LLM baseline, initial corpus (graph/transactions/persistence/
-   cad). Evidence-rich run records.
+5. ~~**WorldBench v0**~~ — done: `worldos-bench` crate + `bench/tasks/`
+   (6 tasks) + `bench/reports/v0-baseline.json` (6/6 pass); wired into
+   `scripts/bench.ps1`. Remaining: richer check kinds, corpus growth.
 6. **Agent tool-use loop** — bounded observe→act→inspect→replan with
    iteration caps and deterministic goal verification (separate from
    "commands ran").

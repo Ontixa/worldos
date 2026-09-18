@@ -1,0 +1,52 @@
+id: cad-parametric
+title: Boolean + set_param regeneration + staleness propagation
+steps:
+  - name: base plate 50x40x20
+    command: cad.create_box
+    input:
+      size_mm: [50.0, 40.0, 20.0]
+      name: plate-stock
+    expect:
+      - {kind: ok}
+
+  - name: drill tool through the middle
+    command: cad.create_cylinder
+    input:
+      radius_mm: 5.0
+      height_mm: 30.0
+      position: [25.0, 20.0, -5.0]
+      name: drill
+    expect:
+      - {kind: ok}
+
+  - name: subtract -> plate with a hole
+    command: cad.boolean
+    input:
+      a: plate-stock
+      b: drill
+      op: subtract
+      name: plate
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 38429.2, rel: 0.001}
+      - {kind: eq, path: "output.topology.is_valid", value: true}
+
+  - name: widen the stock -> plate goes stale
+    command: cad.set_param
+    input:
+      object: plate-stock
+      params:
+        size_mm: [100.0, 40.0, 20.0]
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 80000}
+      - {kind: query_object, name: plate, path: "cad:shape.stale", value: true}
+
+  - name: regenerate the stale plate
+    command: cad.regenerate
+    input:
+      object: plate
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 78429.2, rel: 0.001}
+      - {kind: query_object, name: plate, path: "cad:shape.stale", value: false}

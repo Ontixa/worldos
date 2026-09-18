@@ -1,0 +1,35 @@
+id: graph-crud
+title: Object + relation lifecycle through commands
+steps:
+  - name: create a note
+    command: object.create
+    input:
+      type: core:note
+      name: memo
+    expect:
+      - {kind: ok}
+      - {kind: present, path: "output.id"}
+      - {kind: query_object, name: memo}
+
+  - name: create a second note
+    command: object.create
+    input:
+      type: core:note
+      name: memo2
+    expect:
+      - {kind: ok}
+
+  - name: delete the second note
+    command: object.delete
+    input:
+      name: memo2
+    expect:
+      - {kind: ok}
+      - {kind: query_absent, name: memo2}
+
+  - name: schema rejects malformed input
+    command: object.create
+    input:
+      name: missing-type
+    expect:
+      - {kind: error}

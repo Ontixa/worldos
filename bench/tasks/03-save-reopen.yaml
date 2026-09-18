@@ -1,0 +1,36 @@
+id: save-reopen
+title: Project state survives save and reopen
+steps:
+  - name: create a note
+    command: object.create
+    input:
+      type: core:note
+      name: persisted
+    expect:
+      - {kind: ok}
+
+  - name: save the project
+    command: engine.save
+    expect:
+      - {kind: ok}
+
+  - name: reopen from disk
+    command: engine.reopen
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: persisted}
+
+  - name: save_as to a second file
+    command: engine.save_as
+    input:
+      file: moved.worldos
+    expect:
+      - {kind: ok}
+
+  - name: reopen the moved file
+    command: engine.reopen
+    input:
+      file: moved.worldos
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: persisted}

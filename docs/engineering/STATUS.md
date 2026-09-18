@@ -1,8 +1,8 @@
 # Engineering Status
 
-Only demonstrably working behavior is listed here. Verified against
-`main @ 0c7e480` on 2026-09-18 (Windows 10, `x86_64-pc-windows-gnu`,
-cargo test --workspace: 36 tests green).
+Only demonstrably working behavior is listed here. Verified on
+2026-09-19 (Windows 10, `x86_64-pc-windows-gnu`, cargo test
+--workspace green; WorldBench corpus 6/6 pass).
 
 ## Working today
 
@@ -40,6 +40,19 @@ cargo test --workspace: 36 tests green).
   (builds; viewport renders analytic primitives).
 - **CI** — windows-latest: fmt + clippy + tests; TS+Python SDK build;
   desktop `cargo check`.
+- **Artifacts** — `worldos-artifact` content-addressed store
+  (SHA-256, fan-out `objects/<hh>/<hex>`, atomic writes, verify-on-read,
+  gc); sidecar `<project>.artifacts/` follows `save_as`.
+- **Real CAD (Forge slice 1)** — `worldos-cad` `CadKernel` trait +
+  `worldos-adapter-cadrum` (OCCT 8.0.1). Commands: `cad.create_{box,
+  cylinder,sphere}`, `cad.boolean`, `cad.fillet`, `cad.chamfer`,
+  `cad.transform`, `cad.measure`, `cad.export_{step,stl}`,
+  `cad.import_step`, `cad.set_param`, `cad.regenerate`. `cad:operation`
+  recipes are replayable; `core:derived-from` edges form the feature
+  tree; `cad:shape.stale` flags dependents. `position` is baked into
+  the BRep (world-space truth).
+- **WorldBench v0** — `worldos-bench` crate + `bench/tasks/*.yaml`
+  corpus (6 tasks) + `bench/reports/v0-baseline.json` (6/6 pass).
 
 ## Verified external dependency
 
@@ -52,9 +65,10 @@ cargo test --workspace: 36 tests green).
 
 ## Not yet working (see LIMITATIONS.md)
 
-- Real B-rep in the project graph (no `worldos-cad` yet).
-- Content-addressed artifact store.
-- STEP/STL import/export through WorldOS commands.
-- WorldBench, property tests, fuzz targets, crash-injection tests.
+- Semantic CAD topology selectors (`top_face`, `edges_adjacent_to`) —
+  `edge_ids`/`face_ids` in `cad:shape.topology` are raw kernel ids.
+- Deep regen: `cad.regenerate` replays one node using sources' current
+  BReps; no topological replay of a stale chain yet.
+- Property tests, fuzz targets, crash-injection tests.
 - Plugin sandboxing (native plugins are trusted local code).
 - Collaboration / multi-writer.

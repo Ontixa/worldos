@@ -12,6 +12,7 @@ members = [
     "crates/worldos-agent",
     "crates/worldos-rpc",
     "crates/worldos-cli",
+    "crates/worldos-bench",
 ]
 
 [workspace.package]

@@ -1,0 +1,39 @@
+id: cad-create-measure
+title: Real OCCT box creation + kernel-verified measure
+steps:
+  - name: create a 50x40x20 box
+    command: cad.create_box
+    input:
+      size_mm: [50.0, 40.0, 20.0]
+      name: block
+    expect:
+      - {kind: ok}
+      - {kind: present, path: "output.brep"}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 40000}
+      - {kind: eq, path: "output.topology.faces", value: 6}
+      - {kind: eq, path: "output.topology.edges", value: 12}
+      - {kind: eq, path: "output.topology.is_valid", value: true}
+
+  - name: measure it back through the kernel
+    command: cad.measure
+    input:
+      object: block
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 40000}
+      - {kind: approx, path: "output.measures.area_mm2", value: 7600}
+
+  - name: a non-cad object cannot be measured
+    command: object.create
+    input:
+      type: core:note
+      name: notabody
+    expect:
+      - {kind: ok}
+
+  - name: measuring the note fails cleanly
+    command: cad.measure
+    input:
+      object: notabody
+    expect:
+      - {kind: error, contains: "cad:body"}
