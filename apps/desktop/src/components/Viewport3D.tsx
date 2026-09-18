@@ -108,6 +108,39 @@ export default function Viewport3D({
         ctx.fill();
         ctx.strokeStyle = sel ? "#ffd33d" : "#30363d";
         ctx.stroke();
+      } else if (p.kind === "cone") {
+        // pyramid wireframe: square base + apex
+        const [rx, , h2] = [dims[0] / 2, dims[1] / 2, dims[2] / 2];
+        const base: V3[] = [
+          [-rx, -h2, -rx], [rx, -h2, -rx], [rx, -h2, rx], [-rx, -h2, rx],
+        ].map(([x, y, z]) => [x + p.pos[0], y + p.pos[1], z + p.pos[2]] as V3);
+        const apex = proj([p.pos[0], p.pos[1] + h2, p.pos[2]]);
+        const pb = base.map(proj);
+        ctx.fillStyle = shade(p.color, sel);
+        ctx.strokeStyle = sel ? "#ffd33d" : p.color;
+        ctx.lineWidth = sel ? 2 : 1;
+        poly(ctx, pb);
+        for (const c of pb) line(ctx, c, apex);
+      } else if (p.kind === "torus") {
+        // torus lies flat in xz: outer ellipse (proj of circle) + hole hint
+        ctx.strokeStyle = sel ? "#ffd33d" : p.color;
+        ctx.fillStyle = shade(p.color, sel);
+        ctx.lineWidth = sel ? 2 : 1;
+        const ring = (r: number) => {
+          ctx.beginPath();
+          for (let i = 0; i <= 24; i++) {
+            const a = (i / 24) * Math.PI * 2;
+            const pt = proj([p.pos[0] + r * Math.cos(a), p.pos[1], p.pos[2] + r * Math.sin(a)]);
+            i === 0 ? ctx.moveTo(pt[0], pt[1]) : ctx.lineTo(pt[0], pt[1]);
+          }
+          ctx.closePath();
+          ctx.globalAlpha = 0.25;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+          ctx.stroke();
+        };
+        ring(dims[0] / 2);               // outer edge of ring
+        ring(dims[0] / 2 - dims[1] / 2); // inner edge (hole)
       } else {
         // box-ish wireframe for cube/cylinder/plane
         const [sx2, sy2, sz2] = [dims[0] / 2, dims[1] / 2, dims[2] / 2];

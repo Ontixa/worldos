@@ -40,7 +40,11 @@ pub fn run(cmd: Cmd, json_out: bool) -> Result<(), Box<dyn std::error::Error>> {
             object: Some(key),
         } => {
             let e = open(&file)?;
-            let obj = resolve(&e, &key).ok_or(format!("object `{key}` not found"))?;
+            let oid = resolve(&e, &key).ok_or(format!("object `{key}` not found"))?;
+            let obj = e
+                .project()
+                .get(oid)
+                .ok_or(format!("object `{key}` not found"))?;
             print(json_out, &serde_json::to_value(obj)?, |o| {
                 println!(
                     "{}  ({})",
@@ -238,6 +242,42 @@ pub fn run(cmd: Cmd, json_out: bool) -> Result<(), Box<dyn std::error::Error>> {
                 }
             });
         }
+        Cmd::Search {
+            file,
+            text,
+            type_id,
+            tag,
+            has_component,
+            limit,
+        } => {
+            let e = open(&file)?;
+            let q = worldos_kernel::SearchQuery {
+                text,
+                type_id,
+                tag,
+                has_component,
+                limit: Some(limit),
+            };
+            let hits: Vec<Value> = e
+                .search(&q)
+                .into_iter()
+                .map(|o| json!({"id": o.id.to_string(), "name": o.name, "type": o.type_id.0}))
+                .collect();
+            print(json_out, &json!({"results": hits}), |v| {
+                let rs = v["results"].as_array().unwrap();
+                if rs.is_empty() {
+                    println!("no matches");
+                }
+                for o in rs {
+                    println!(
+                        "  {:<24} {:<18} {}",
+                        o["name"].as_str().unwrap(),
+                        o["type"].as_str().unwrap(),
+                        o["id"].as_str().unwrap()
+                    );
+                }
+            });
+        }
         Cmd::Agent { file, goal, agent } => {
             let mut e = open(&file)?;
             let report = e.run_capability("agent.run", json!({"goal": goal, "agent": agent}))?;
@@ -303,7 +343,12 @@ pub fn run(cmd: Cmd, json_out: bool) -> Result<(), Box<dyn std::error::Error>> {
             }
             let list: Vec<Value> = found
                 .iter()
-                .map(|(n, p)| json!({"name": n, "path": p.display().to_string()}))
+                .map(|(n, p)| {
+                    let m = worldos_capability::plugin::manifest_for(p);
+                    json!({"name": n, "path": p.display().to_string(),
+                           "description": m.as_ref().and_then(|m| m.description.clone()),
+                           "permissions": m.and_then(|m| m.permissions)})
+                })
                 .collect();
             print(
                 json_out,

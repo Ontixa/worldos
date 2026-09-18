@@ -15,6 +15,13 @@
 //!
 //! Env handed to the child: `WORLDOS_PROJECT`, `WORLDOS_PLUGIN_NAME`,
 //! `WORLDOS_PROTOCOL=1`.
+//!
+//! An optional sidecar manifest `<program-stem>.json` (e.g.
+//! `worldos-plugin-stamp.json`) declares metadata and permissions:
+//!   `{"description": "…", "permissions": ["project.read", "command.execute"]}`
+//! When `permissions` is declared the plugin actor gets EXACTLY those
+//! grants — nothing else. Without a manifest the plugin inherits the
+//! agent-style default (trusted local code).
 
 use crate::error::CapabilityError;
 use crate::host::CapabilityHost;
@@ -50,6 +57,37 @@ fn fail(e: impl std::fmt::Display) -> CapabilityError {
     CapabilityError::Failed(e.to_string())
 }
 
+/// Optional `<program-stem>.json` manifest beside a plugin executable.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct PluginManifest {
+    pub description: Option<String>,
+    pub permissions: Option<Vec<String>>,
+}
+
+/// Load the manifest for a plugin program, if one exists.
+/// `worldos-plugin-stamp.py` → `worldos-plugin-stamp.json`.
+pub fn manifest_for(program: &Path) -> Option<PluginManifest> {
+    let path = program.with_extension("json");
+    let text = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+/// Build the plugin actor, honoring declared manifest permissions.
+/// Declared `permissions` are taken verbatim — the manifest is the
+/// contract; absent, the plugin inherits the agent-style default.
+pub fn actor_for(spec: &PluginSpec) -> Actor {
+    let mut actor = Actor::plugin(&spec.name);
+    if let Some(grants) = manifest_for(&spec.program).and_then(|m| m.permissions) {
+        actor.permissions = worldos_kernel::actor::PermissionSet {
+            grants: grants
+                .iter()
+                .map(worldos_kernel::actor::Permission::new)
+                .collect(),
+        };
+    }
+    actor
+}
+
 // ------------------------------------------------------------------ spawn
 
 /// Spawn the plugin and serve its request channel until it exits or the
@@ -83,7 +121,7 @@ pub fn run_plugin(
         }
     });
 
-    let actor = Actor::plugin(&spec.name);
+    let actor = actor_for(spec);
     let own_txn = !host.in_transaction();
     if own_txn {
         host.begin_transaction_as(&actor, &format!("plugin:{} session", spec.name))?;
@@ -301,7 +339,15 @@ pub fn spawn_command(spec: &PluginSpec) -> Command {
         .unwrap_or("")
         .to_lowercase();
     let (prog, mut pre): (String, Vec<String>) = match ext.as_str() {
-        "py" => ("python".into(), vec![spec.program.display().to_string()]),
+        // Windows ships `python`; unix-likes commonly only have `python3`.
+        "py" => (
+            if cfg!(windows) || which("python").is_some() {
+                "python".into()
+            } else {
+                "python3".into()
+            },
+            vec![spec.program.display().to_string()],
+        ),
         "ps1" => (
             "powershell".into(),
             vec![
@@ -349,7 +395,12 @@ pub fn discover(dir: &Path) -> Vec<(String, PathBuf)> {
         let Some(stem) = path.file_name().and_then(|n| n.to_str()) else {
             continue;
         };
-        if path.is_file() && stem.starts_with("worldos-plugin-") {
+        // `.json` files next to plugins are manifests, not plugins.
+        let is_manifest = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("json"));
+        if path.is_file() && stem.starts_with("worldos-plugin-") && !is_manifest {
             let name = stem
                 .trim_end_matches(".exe")
                 .trim_end_matches(".py")

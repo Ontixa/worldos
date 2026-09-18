@@ -47,11 +47,37 @@ violation, or timeout → the whole session rolls back.
 Env: `WORLDOS_PROJECT`, `WORLDOS_PLUGIN_NAME`, `WORLDOS_PROTOCOL=1`.
 stderr is for diagnostics — keep stdout protocol-clean.
 
+## Manifests — declared permissions
+
+A sidecar `<program-stem>.json` next to the plugin declares metadata and
+the exact permission grants the plugin gets:
+
+```json
+{
+  "description": "What this plugin does",
+  "permissions": ["project.read", "project.write", "command.execute"]
+}
+```
+
+- `permissions` present → the `plugin:<name>` actor gets EXACTLY those
+  grants; anything else is denied (`permission denied` errors roll the
+  session back like any failure).
+- No manifest → the plugin inherits the agent-style default (trusted
+  local code).
+
+## Writing a plugin
+
+Python plugins can use the SDK's client — `worldos.Plugin` in
+`sdks/worldos-py/worldos.py` wraps the whole protocol (`call`, `command`,
+`info`, `objects`, `search`, `validate`, `end`, `run(fn)`).
+
 ## Reference implementations
 
-- `worldos-plugin-stamp.py` (this dir) — minimal Python plugin
+- `worldos-plugin-stamp.py` + `.json` (this dir) — Python plugin using the
+  SDK client with an inline fallback, plus a permission manifest
 - `worldos plugin-shim` — the CLI's own binary doubles as a Rust reference
   plugin (hidden subcommand; used by the e2e test)
 
 Script extensions are dispatched to interpreters automatically:
-`.py` → `python`, `.ps1` → `powershell -File`, `.cmd`/`.bat` → `cmd /c`.
+`.py` → `python`/`python3`, `.ps1` → `powershell -File`,
+`.cmd`/`.bat` → `cmd /c`.

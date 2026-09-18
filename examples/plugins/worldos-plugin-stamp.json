@@ -1,0 +1,9 @@
+{
+    "description": "Stamps a note into the project and validates — reference plugin for the hosted-plugin protocol.",
+    "permissions": [
+        "project.read",
+        "project.write",
+        "command.execute",
+        "validation.run"
+    ]
+}

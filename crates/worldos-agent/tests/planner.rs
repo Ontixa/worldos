@@ -121,3 +121,41 @@ fn agent_run_uses_runtime_transaction() {
     assert!(e.find_object("kept?").is_none(), "partial work rolled back");
     let _ = json!({}); // silence unused import in some cfgs
 }
+
+#[test]
+fn agent_run_scoped_permissions_deny_writes() {
+    // multi-agent profile: a read-only agent must not be able to write,
+    // even though the session user can.
+    let mut e = Engine::new("t");
+    let rt = AgentRuntime::new(Box::new(RulePlanner));
+    let report = rt.run_scoped(
+        &mut e,
+        "create a cube named denied-cube",
+        "readonly-bot",
+        Some(&["project.read".into(), "project.search".into()]),
+    );
+    assert_eq!(report.status, RunStatus::Failed);
+    assert!(e.find_object("denied-cube").is_none());
+}
+
+#[test]
+fn agent_run_scoped_permissions_allow_writes() {
+    let mut e = Engine::new("t");
+    let rt = AgentRuntime::new(Box::new(RulePlanner));
+    let report = rt.run_scoped(
+        &mut e,
+        "create a cube named ok-cube",
+        "builder-bot",
+        Some(&[
+            "project.*".into(),
+            "command.execute".into(),
+            "capability.execute".into(),
+        ]),
+    );
+    assert_eq!(report.status, RunStatus::Succeeded, "{}", report.summary);
+    assert!(e.find_object("ok-cube").is_some());
+    assert_eq!(
+        e.history().records.last().unwrap().actor.0,
+        "agent:builder-bot"
+    );
+}

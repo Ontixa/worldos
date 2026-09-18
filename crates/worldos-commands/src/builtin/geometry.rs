@@ -17,11 +17,11 @@ impl CommandHandler for GeometryCreatePrimitive {
         CommandSchema::write(
             "geometry.create_primitive",
             "geometry",
-            "Create a 3D primitive (cube, sphere, cylinder, plane) with transform + material",
+            "Create a 3D primitive (cube, sphere, cylinder, cone, torus, plane) with transform + material",
             props::object(
                 &["kind"],
                 json!({
-                    "kind": {"type": "string", "enum": ["cube", "sphere", "cylinder", "plane"]},
+                    "kind": {"type": "string", "enum": ["cube", "sphere", "cylinder", "cone", "torus", "plane"]},
                     "name": {"type": "string"},
                     "size": {"description": "scalar or [x,y,z]"},
                     "position": {"type": "array", "items": {"type": "number"}},
@@ -42,7 +42,7 @@ impl CommandHandler for GeometryCreatePrimitive {
             .and_then(|n| n.as_str())
             .map(String::from)
             .unwrap_or_else(|| format!("{kind}-{}", short_seq(ctx)));
-        let size = input.get("size").cloned().unwrap_or(json!(1.0));
+        let size = normalize_size(kind, input.get("size").cloned().unwrap_or(json!(1.0)));
         let position = input.get("position").cloned().unwrap_or(json!([0, 0, 0]));
         let color = input.get("color").cloned().unwrap_or(json!("#9aa7b8"));
         let mut args = json!({
@@ -60,6 +60,28 @@ impl CommandHandler for GeometryCreatePrimitive {
             args["parent"] = p.clone();
         }
         ctx.run_sub("object.create", args)
+    }
+}
+
+/// Torus size is stored normalized as `[ring_d, tube_d, ring_d]` (flat in
+/// the xz ground plane) so bounding boxes stay meaningful: scalar `s` →
+/// `[s, s/3, s]`; array `[D, d, …]` → `[D, d, D]`. Other kinds keep
+/// `size` verbatim.
+fn normalize_size(kind: &str, size: Value) -> Value {
+    if kind != "torus" {
+        return size;
+    }
+    match size {
+        Value::Number(n) => {
+            let s = n.as_f64().unwrap_or(1.0);
+            json!([s, s / 3.0, s])
+        }
+        Value::Array(a) => {
+            let big_d = a.first().and_then(|v| v.as_f64()).unwrap_or(1.0);
+            let tube_d = a.get(1).and_then(|v| v.as_f64()).unwrap_or(big_d / 3.0);
+            json!([big_d, tube_d, big_d])
+        }
+        other => other,
     }
 }
 

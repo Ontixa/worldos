@@ -49,12 +49,14 @@ The domain-free semantic core.
 - `builtin.rs` — inspect/search/validate/export/measure capabilities
 - `plugin.rs` — hosted plugin runtime: `worldos-plugin-*` subprocesses
   speaking line-delimited JSON-RPC over stdio; `plugin.run` capability,
-  discovery, interpreter dispatch, timeout, commit/rollback
+  discovery, interpreter dispatch, timeout, commit/rollback, sidecar
+  `.json` manifests declaring exact actor permissions
 
 ## crates/worldos-engine
 
 - `engine.rs` — `Engine` facade: lifecycle, execute(+as actor),
-  transactions, undo/redo, capabilities, validation, search, events
+  transactions, undo/redo, capabilities, validation, search, events,
+  dependency-driven requirement staleness (`mark_stale_dependents`)
 - `diff.rs` — project-vs-project diff
 - `tests/genesis.rs` — the acceptance test
 
@@ -63,8 +65,10 @@ The domain-free semantic core.
 - `planner/` — `Planner` trait + `PlannedStep`; `rules.rs` (deterministic
   offline planner), `llm.rs` (`LlmPlanner` over `ModelProvider` with
   self-repair reprompt + `FallbackPlanner` chain)
-- `runtime.rs` — plan→act→verify loop in one transaction
-- `capability.rs` — `AgentRun` capability (`agent.run`)
+- `runtime.rs` — plan→act→verify loop in one transaction;
+  `run_scoped` per-run permission profiles
+- `capability.rs` — `AgentRun` capability (`agent.run`, optional
+  `permissions` input)
 - `provider.rs` — `ModelProvider` trait, `EchoProvider`,
   `OpenAiCompatible` (feature `llm`, env-configured BYOK)
 - `report.rs` — `AgentReport`, step records

@@ -16,10 +16,12 @@ pub mod types {
     pub const SPHERE: &str = "geom:sphere";
     pub const CYLINDER: &str = "geom:cylinder";
     pub const PLANE: &str = "geom:plane";
+    pub const CONE: &str = "geom:cone";
+    pub const TORUS: &str = "geom:torus";
 
     /// True for builtin spatial primitive types.
     pub fn is_primitive(t: &str) -> bool {
-        matches!(t, CUBE | SPHERE | CYLINDER | PLANE)
+        matches!(t, CUBE | SPHERE | CYLINDER | PLANE | CONE | TORUS)
     }
 }
 

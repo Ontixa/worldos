@@ -17,7 +17,9 @@ impl Capability for AgentRun {
                 "required": ["goal"],
                 "properties": {
                     "goal": {"type": "string"},
-                    "agent": {"type": "string", "description": "agent name, default `assistant`"}
+                    "agent": {"type": "string", "description": "agent name, default `assistant`"},
+                    "permissions": {"type": "array", "items": {"type": "string"},
+                        "description": "exact permission grants for this run (multi-agent profiles); omit for the agent default"}
                 }
             }),
         );
@@ -39,8 +41,17 @@ impl Capability for AgentRun {
             .get("agent")
             .and_then(|a| a.as_str())
             .unwrap_or("assistant");
+        let grants: Option<Vec<String>> =
+            input
+                .get("permissions")
+                .and_then(|p| p.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                });
         let rt = AgentRuntime::from_env();
-        let report = rt.run(host, goal, agent);
+        let report = rt.run_scoped(host, goal, agent, grants.as_deref());
         serde_json::to_value(report).map_err(CapabilityError::Serde)
     }
 }

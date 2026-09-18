@@ -81,8 +81,29 @@ impl AgentRuntime {
     /// transaction attributed to the agent actor; any failure rolls back
     /// cleanly and is reported — never silently half-applied.
     pub fn run(&self, host: &mut dyn CapabilityHost, goal: &str, agent_name: &str) -> AgentReport {
+        self.run_scoped(host, goal, agent_name, None)
+    }
+
+    /// Run with caller-declared permission grants — a multi-agent profile.
+    /// `grants: Some(&["project.read", …])` gives the agent actor EXACTLY
+    /// those permissions; `None` uses the agent default.
+    pub fn run_scoped(
+        &self,
+        host: &mut dyn CapabilityHost,
+        goal: &str,
+        agent_name: &str,
+        grants: Option<&[String]>,
+    ) -> AgentReport {
         let run_id = AgentRunId::new();
-        let agent = Actor::agent(agent_name);
+        let mut agent = Actor::agent(agent_name);
+        if let Some(grants) = grants {
+            agent.permissions = worldos_kernel::actor::PermissionSet {
+                grants: grants
+                    .iter()
+                    .map(worldos_kernel::actor::Permission::new)
+                    .collect(),
+            };
+        }
 
         // 1. plan — inspect state, resolve commands
         let steps = match self.planner.plan(goal, host) {

@@ -220,6 +220,7 @@ impl Engine {
         }
         let txn = self.open_txn.as_mut().unwrap();
         let txn_id = txn.id;
+        let ops_before = txn.ops.len();
 
         let mut env = CommandEnvelope::new(command_type, actor.id.clone(), inputs.clone());
         env.transaction_id = Some(txn_id);
@@ -236,6 +237,7 @@ impl Engine {
 
         match result {
             Ok(output) => {
+                self.mark_stale_dependents(command_type, actor, ops_before);
                 let command_id = env.id;
                 self.emit(EngineEvent::CommandExecuted {
                     command_id,
@@ -272,6 +274,87 @@ impl Engine {
                 }
                 Err(e.into())
             }
+        }
+    }
+
+    /// Dependency-driven staleness: if THIS command touched an object that
+    /// a requirement `core:depends-on`, flip that requirement's status to
+    /// `stale`. Only ops appended by this command (`ops[ops_before..]`)
+    /// count — earlier ops in a shared transaction already marked their
+    /// own dependents. Recorded as ops in the SAME transaction, so the
+    /// marking is atomic and undoes together with the change that caused it.
+    fn mark_stale_dependents(&mut self, command_type: &str, actor: &Actor, ops_before: usize) {
+        // evaluate/set_status write fresh status themselves — don't stomp it.
+        if matches!(
+            command_type,
+            "requirement.evaluate" | "requirement.set_status"
+        ) {
+            return;
+        }
+        let Some(txn) = self.open_txn.as_ref() else {
+            return;
+        };
+        let touched: std::collections::BTreeSet<worldos_kernel::ObjectId> = txn
+            .ops
+            .iter()
+            .skip(ops_before)
+            .filter_map(|op| match op {
+                worldos_kernel::StateOp::SetObject { before, after } => after
+                    .as_ref()
+                    .map(|o| o.id)
+                    .or_else(|| before.as_ref().map(|o| o.id)),
+                _ => None,
+            })
+            .collect();
+        if touched.is_empty() {
+            return;
+        }
+        let mut req_ids: Vec<worldos_kernel::ObjectId> = self
+            .project
+            .relations
+            .values()
+            .filter(|r| {
+                r.type_id == worldos_kernel::known::rel::DEPENDS_ON && touched.contains(&r.to)
+            })
+            .map(|r| r.from)
+            .collect();
+        // a requirement touched directly (e.g. expression edit) stales too —
+        // deleted requirements simply fail the update_object below.
+        req_ids.extend(touched.iter().copied());
+        req_ids.retain(|id| {
+            self.project
+                .get(*id)
+                .and_then(|o| {
+                    o.component_data(worldos_kernel::known::components::REQUIREMENT_STATUS)
+                })
+                .and_then(|c| c.get("status"))
+                .and_then(|s| s.as_str())
+                .is_some_and(|s| matches!(s, "pass" | "fail"))
+        });
+        req_ids.sort();
+        req_ids.dedup();
+        if req_ids.is_empty() {
+            return;
+        }
+        let txn = self.open_txn.as_mut().unwrap();
+        let mut ctx = worldos_commands::CommandContext {
+            project: &mut self.project,
+            ops: &mut txn.ops,
+            actor,
+            registry: &self.registry,
+        };
+        for id in req_ids {
+            let _ = ctx.update_object(id, |o| {
+                if let Some(c) = o
+                    .components
+                    .get_mut(worldos_kernel::known::components::REQUIREMENT_STATUS)
+                {
+                    c.data["status"] = serde_json::json!("stale");
+                    let prev = c.data["verdict"].as_str().unwrap_or_default().to_string();
+                    c.data["verdict"] =
+                        serde_json::json!(format!("{prev} [stale: dependency changed]").trim());
+                }
+            });
         }
     }
 

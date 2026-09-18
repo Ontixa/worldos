@@ -93,9 +93,11 @@ to a read surface + `command.execute`. The session runs as the
 `plugin:<name>` actor inside ONE transaction — committed on clean exit,
 rolled back on crash/timeout/protocol violation. Discovery scans
 `plugins/` dirs, `~/.worldos/plugins`, `WORLDOS_PLUGIN_PATH`, and PATH;
-script extensions get interpreters (`.py`, `.ps1`, `.cmd`). Same channel
-is exposed as the `plugin.run` capability so agents/MCP/SDK clients can
-invoke plugins.
+script extensions get interpreters (`.py`, `.ps1`, `.cmd`). A sidecar
+`<stem>.json` manifest can declare `permissions` — when present the
+plugin actor gets exactly those grants; otherwise it inherits the
+agent-style default. The same channel is exposed as the `plugin.run`
+capability so agents/MCP/SDK clients can invoke plugins.
 
 ## Persistence
 

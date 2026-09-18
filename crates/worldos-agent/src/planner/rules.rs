@@ -136,7 +136,7 @@ fn try_create(
         }]));
     }
 
-    for kind in ["cube", "sphere", "cylinder", "plane"] {
+    for kind in ["cube", "sphere", "cylinder", "cone", "torus", "plane"] {
         if lower.contains(kind) {
             let mut steps = vec![PlannedStep {
                 command: "geometry.create_primitive".into(),

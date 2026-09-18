@@ -67,6 +67,20 @@ enum Cmd {
     Redo { file: PathBuf },
     /// Semantic diff between two project files.
     Diff { a: PathBuf, b: PathBuf },
+    /// Semantic search over objects (text, type, tag, component).
+    Search {
+        file: PathBuf,
+        #[arg(short, long)]
+        text: Option<String>,
+        #[arg(long = "type")]
+        type_id: Option<String>,
+        #[arg(long)]
+        tag: Option<String>,
+        #[arg(long)]
+        has_component: Option<String>,
+        #[arg(short, long, default_value = "50")]
+        limit: usize,
+    },
     /// Run the agent on a goal.
     Agent {
         file: PathBuf,

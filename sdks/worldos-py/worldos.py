@@ -145,3 +145,91 @@ def create(name: str, path: str, binary: Optional[str] = None) -> Project:
     subprocess.run([exe, "new", name, "--path", path],
                    check=True, capture_output=True, text=True)
     return open(path, exe)
+
+
+# ---------------------------------------------------------------------------
+# Plugin side — the other end of the same protocol.
+#
+# A `worldos-plugin-*` executable is spawned by the host and speaks
+# line-delimited JSON-RPC over its OWN stdin/stdout (requests on stdout,
+# responses on stdin). Everything runs as the `plugin:<name>` actor inside
+# one transaction — a clean exit commits, a crash rolls back.
+#
+#   def main(p):
+#       p.command("object.create", {"type": "core:note", "name": "hi"})
+#
+#   if __name__ == "__main__":
+#       worldos.Plugin().run(main)
+# ---------------------------------------------------------------------------
+
+
+class PluginError(Exception):
+    pass
+
+
+class Plugin:
+    """Client handle for code running INSIDE a hosted plugin process."""
+
+    def __init__(self):
+        import os
+        import sys
+
+        if not os.environ.get("WORLDOS_PROTOCOL"):
+            raise PluginError(
+                "not inside a plugin session — run via `worldos plugin run`"
+            )
+        self.name = os.environ.get("WORLDOS_PLUGIN_NAME", "plugin")
+        self.project_path = os.environ.get("WORLDOS_PROJECT")
+        self._in = sys.stdin
+        self._out = sys.stdout
+        self._next_id = 0
+
+    def call(self, method: str, params: Optional[dict] = None) -> Any:
+        self._next_id += 1
+        self._out.write(
+            json.dumps({"id": self._next_id, "method": method,
+                        "params": params or {}}) + "\n"
+        )
+        self._out.flush()
+        line = self._in.readline()
+        if not line:
+            raise PluginError("host closed the session channel")
+        resp = json.loads(line)
+        if resp.get("error"):
+            raise PluginError(resp["error"].get("message", "plugin call failed"))
+        return resp.get("result")
+
+    def info(self) -> dict:
+        return self.call("project.info")
+
+    def objects(self, type_id: str = "") -> list:
+        params = {"type": type_id} if type_id else {}
+        return self.call("object.list", params)["objects"]
+
+    def get(self, id_or_name: str) -> dict:
+        key = "id" if len(id_or_name) == 26 else "name"
+        return self.call("object.get", {key: id_or_name})
+
+    def search(self, **query: Any) -> list:
+        return self.call("project.search", query)["results"]
+
+    def commands(self) -> list:
+        return self.call("command.list")
+
+    def command(self, command_type: str, input: Optional[dict] = None) -> Any:
+        return self.call(
+            "command.execute", {"type": command_type, "input": input or {}}
+        )
+
+    def validate(self) -> dict:
+        return self.call("validation.run")
+
+    def end(self) -> None:
+        """Signal a clean finish — the host commits the transaction."""
+        self.call("session.end")
+
+    def run(self, fn) -> None:
+        """Run `fn(plugin)`, then end the session. Exceptions propagate —
+        the host sees a crash and rolls back the transaction."""
+        fn(self)
+        self.end()

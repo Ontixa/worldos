@@ -55,6 +55,24 @@ pub fn measure_primitive(kind: &str, d: [f64; 3]) -> (f64, f64) {
             )
         }
         "plane" => (0.0, d[0] * d[1]),
+        // cone: circular base diameter d[0], height d[2] — apex up
+        "cone" => {
+            let r = d[0] / 2.0;
+            let h = d[2];
+            (
+                std::f64::consts::PI * r * r * h / 3.0,
+                std::f64::consts::PI * r * (r + (h * h + r * r).sqrt()),
+            )
+        }
+        // torus: ring diameter d[0]=d[2] (flat in xz), tube diameter d[1]
+        "torus" => {
+            let big_r = d[0] / 2.0;
+            let r = d[1] / 2.0;
+            (
+                2.0 * std::f64::consts::PI.powi(2) * big_r * r * r,
+                4.0 * std::f64::consts::PI.powi(2) * big_r * r,
+            )
+        }
         _ => (
             d[0] * d[1] * d[2],
             2.0 * (d[0] * d[1] + d[1] * d[2] + d[0] * d[2]),

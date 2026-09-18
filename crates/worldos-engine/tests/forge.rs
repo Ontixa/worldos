@@ -167,6 +167,76 @@ fn plugin_session_rollback_on_abort() {
 }
 
 #[test]
+fn requirement_goes_stale_when_dependency_changes() {
+    let mut e = Engine::new("t");
+    e.execute(
+        "geometry.create_primitive",
+        json!({"kind": "cube", "name": "big", "size": 2.0}),
+    )
+    .unwrap();
+    e.execute(
+        "requirement.create",
+        json!({"name": "vol", "expression": "volume(\"big\") >= 8"}),
+    )
+    .unwrap();
+    e.execute("requirement.evaluate", json!({"name": "vol"}))
+        .unwrap();
+    assert_eq!(status_of(&e, "vol"), "pass");
+
+    // touching the depended-on object flips the requirement to stale
+    // inside the same transaction — undoing the change restores `pass`.
+    e.execute(
+        "geometry.transform",
+        json!({"name": "big", "scale": [0.5, 0.5, 0.5]}),
+    )
+    .unwrap();
+    assert_eq!(status_of(&e, "vol"), "stale");
+
+    e.undo().unwrap();
+    assert_eq!(status_of(&e, "vol"), "pass");
+    e.redo().unwrap();
+    assert_eq!(status_of(&e, "vol"), "stale");
+}
+
+#[test]
+fn plugin_manifest_declares_exact_permissions() {
+    // manifest sidecar: <stem>.json next to the plugin file
+    let dir = std::env::temp_dir().join(format!("wos-mf-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let prog = dir.join("worldos-plugin-locked.py");
+    std::fs::write(&prog, "pass").unwrap();
+    std::fs::write(
+        dir.join("worldos-plugin-locked.json"),
+        r#"{"description": "locked down", "permissions": ["project.read"]}"#,
+    )
+    .unwrap();
+
+    let m = plugin::manifest_for(&prog).expect("manifest loads");
+    assert_eq!(m.description.as_deref(), Some("locked down"));
+
+    let spec = plugin::PluginSpec {
+        name: "locked".into(),
+        program: prog.clone(),
+        args: vec![],
+        timeout_ms: 5000,
+    };
+    let actor = plugin::actor_for(&spec);
+    // declared set is exact: project.read yes, command.execute no
+    assert!(
+        actor
+            .permissions
+            .is_allowed(&worldos_kernel::actor::Permission::new("project.read"))
+    );
+    assert!(
+        !actor
+            .permissions
+            .is_allowed(&worldos_kernel::actor::Permission::new("command.execute"))
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn plugin_actor_cannot_exceed_permissions() {
     let mut e = Engine::new("t");
     let mut plugin_actor = worldos_kernel::Actor::plugin("unprivileged");
