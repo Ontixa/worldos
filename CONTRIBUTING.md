@@ -2,9 +2,19 @@
 
 ## Setup
 
-- Rust (MSVC on Windows): `cargo build --workspace`
+- Rust: `cargo build --workspace` (Windows host triples `x86_64-pc-windows-gnu` and `-msvc` both work)
 - Node ≥ 20 for the TS SDK and desktop frontend: `npm install`
 - Python ≥ 3.10 for the Python SDK (no deps)
+
+Windows helper scripts (PowerShell 5.1+):
+
+```powershell
+pwsh scripts/bootstrap.ps1   # check prerequisites, optionally -Install via winget
+pwsh scripts/doctor.ps1      # diagnose the environment (never prints secrets)
+pwsh scripts/check.ps1       # the same gates CI runs
+pwsh scripts/test.ps1        # all test suites
+pwsh scripts/bench.ps1       # benchmarks (writes JSON records under target/bench/)
+```
 
 ## Verify before you push
 
@@ -15,6 +25,8 @@ cargo test --workspace
 npm run typecheck --workspaces --if-present
 python -m py_compile sdks/worldos-py/worldos.py
 ```
+
+(or just `pwsh scripts/check.ps1` and `pwsh scripts/test.ps1`)
 
 Desktop: `cd apps/desktop && npm run build && cd src-tauri && cargo check`
 
