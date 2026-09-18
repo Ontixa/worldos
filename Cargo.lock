@@ -2005,7 +2005,6 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
- "worldos-artifact",
 ]
 
 [[package]]
@@ -2054,6 +2053,8 @@ dependencies = [
  "time",
  "tracing",
  "ulid",
+ "worldos-artifact",
+ "worldos-cad",
  "worldos-kernel",
 ]
 
@@ -2068,7 +2069,10 @@ dependencies = [
  "time",
  "tracing",
  "ulid",
+ "worldos-adapter-cadrum",
  "worldos-agent",
+ "worldos-artifact",
+ "worldos-cad",
  "worldos-capability",
  "worldos-commands",
  "worldos-kernel",

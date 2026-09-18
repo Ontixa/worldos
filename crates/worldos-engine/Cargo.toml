@@ -10,6 +10,8 @@ worldos-kernel = { path = "../worldos-kernel" }
 worldos-commands = { path = "../worldos-commands" }
 worldos-store = { path = "../worldos-store" }
 worldos-capability = { path = "../worldos-capability" }
+worldos-cad = { path = "../worldos-cad" }
+worldos-artifact = { path = "../worldos-artifact" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
@@ -20,4 +22,5 @@ time.workspace = true
 [dev-dependencies]
 tempfile.workspace = true
 worldos-agent = { path = "../worldos-agent" }
+worldos-adapter-cadrum = { path = "../worldos-adapter-cadrum" }
 serde_json.workspace = true

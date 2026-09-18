@@ -1,6 +1,7 @@
 //! Builtin commands shipped with the kernel-adjacent core domains.
 //! Domains added later (CAD, BIM, EDA) register their own via plugins.
 
+mod cad;
 mod code;
 mod document;
 mod geometry;
@@ -9,6 +10,7 @@ mod object;
 mod relation;
 mod requirement;
 
+pub use cad::*;
 pub use code::*;
 pub use document::*;
 pub use geometry::*;

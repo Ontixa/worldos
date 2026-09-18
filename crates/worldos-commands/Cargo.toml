@@ -7,6 +7,8 @@ license.workspace = true
 
 [dependencies]
 worldos-kernel = { path = "../worldos-kernel" }
+worldos-cad = { path = "../worldos-cad" }
+worldos-artifact = { path = "../worldos-artifact" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

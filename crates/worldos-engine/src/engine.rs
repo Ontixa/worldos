@@ -41,6 +41,7 @@ pub struct Engine {
     listeners: Vec<EventListener>,
     path: Option<PathBuf>,
     dirty: bool,
+    cad: Option<Arc<worldos_commands::builtin::CadServices>>,
 }
 
 impl Engine {
@@ -58,6 +59,7 @@ impl Engine {
             listeners: Vec::new(),
             path: None,
             dirty: false,
+            cad: None,
         };
         for cap in worldos_capability::builtin::builtins() {
             e.capabilities.register(cap);
@@ -101,10 +103,59 @@ impl Engine {
         store.save(&Snapshot::new(self.project.clone(), self.history.clone()))?;
         self.path = Some(path.as_ref().to_path_buf());
         self.dirty = false;
+        // Artifacts follow the project file: rebind the cad store to the
+        // new sidecar (migrating blobs) so reopening finds them.
+        if let Some(cad) = &self.cad {
+            let sidecar = worldos_artifact::ArtifactStore::for_project(path.as_ref())
+                .map_err(|e| EngineError::Other(e.to_string()))?;
+            cad.rebind(sidecar)
+                .map_err(|e| EngineError::Other(e.to_string()))?;
+        }
         self.emit(EngineEvent::ProjectSaved {
             path: path.as_ref().display().to_string(),
         });
         Ok(())
+    }
+
+    // ----- cad ------------------------------------------------------------
+
+    /// Attach a CAD kernel: registers the `cad.*` command handlers with
+    /// an artifact store derived from the project file (`<file>.artifacts/`
+    /// sidecar) or a temp pool for unsaved projects. The services are
+    /// rebound to a fresh sidecar on every `save_as`, so artifacts always
+    /// live next to the project file they belong to.
+    pub fn attach_cad(
+        &mut self,
+        kernel: Arc<dyn worldos_cad::CadKernel>,
+    ) -> Result<Arc<worldos_commands::builtin::CadServices>, EngineError> {
+        let store = match &self.path {
+            Some(p) => worldos_artifact::ArtifactStore::for_project(p),
+            None => worldos_artifact::ArtifactStore::open(
+                std::env::temp_dir().join("worldos").join("artifacts"),
+            ),
+        }
+        .map_err(|e| EngineError::Other(e.to_string()))?;
+        Ok(self.attach_cad_with_store(kernel, store))
+    }
+
+    /// Attach with a caller-provided artifact store (tests, custom
+    /// layouts).
+    pub fn attach_cad_with_store(
+        &mut self,
+        kernel: Arc<dyn worldos_cad::CadKernel>,
+        store: worldos_artifact::ArtifactStore,
+    ) -> Arc<worldos_commands::builtin::CadServices> {
+        let services = worldos_commands::builtin::CadServices::new(kernel, store);
+        for h in worldos_commands::builtin::cad_handlers(services.clone()) {
+            self.registry.register(h);
+        }
+        self.cad = Some(services.clone());
+        services
+    }
+
+    /// CAD services when a kernel is attached.
+    pub fn cad(&self) -> Option<Arc<worldos_commands::builtin::CadServices>> {
+        self.cad.clone()
     }
 
     // ----- introspection -------------------------------------------------
