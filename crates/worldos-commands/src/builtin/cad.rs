@@ -399,6 +399,17 @@ fn load_shape(
         json!({"name": target})
     };
     let id = crate::builtin::resolve_object(ctx, &lookup)?;
+    let (sid, state) = load_shape_id(ctx, services, id)?;
+    Ok((id, sid, state))
+}
+
+/// Load a `cad:body` by id into the kernel (the resolution-agnostic
+/// half of [`load_shape`], used by recipe replay).
+fn load_shape_id(
+    ctx: &CommandContext,
+    services: &CadServices,
+    id: worldos_kernel::ids::ObjectId,
+) -> Result<(ShapeId, worldos_cad::CadShape), CommandError> {
     let obj = ctx
         .project
         .get(id)
@@ -437,7 +448,7 @@ fn load_shape(
         .kernel
         .import_brep(&bytes)
         .map_err(|e| CommandError::Failed(format!("brep import failed: {e}")))?;
-    Ok((id, sid, state))
+    Ok((sid, state))
 }
 
 /// `cad.measure` — kernel-verified measures on demand. Rewrites the
@@ -892,6 +903,15 @@ impl CommandHandler for CadImportStep {
             ));
         };
 
+        // STEP source is persisted as an artifact so the recipe is
+        // regenerable even when the original was a filesystem path.
+        let step_ref = self
+            .services
+            .artifacts()
+            .put(&bytes)
+            .map_err(|e| CommandError::Failed(format!("step artifact store: {e}")))?
+            .artifact_ref
+            .to_string();
         let shape = self
             .services
             .kernel
@@ -907,7 +927,10 @@ impl CommandHandler for CadImportStep {
             &self.services,
             shape,
             "import_step",
-            json!({"bytes": bytes.len(), "source": input.get("step").cloned().or_else(|| input.get("file").cloned()).unwrap_or(Value::Null)}),
+            json!({
+                "step": step_ref,
+                "source_file": input.get("file").cloned().unwrap_or(Value::Null),
+            }),
             "cad.import_step",
             ShapeMeta {
                 name,
@@ -916,6 +939,350 @@ impl CommandHandler for CadImportStep {
                 sources: vec![],
             },
         )
+    }
+}
+
+/// Replay a `cad:operation` recipe through the kernel. Caller owns
+/// the returned `ShapeId`. Regeneration reads CURRENT source BReps —
+/// if a source is itself stale, the result reflects that stale
+/// geometry (deep topological replay is v2).
+fn regen(
+    ctx: &CommandContext,
+    services: &CadServices,
+    op: &worldos_cad::CadOperation,
+) -> Result<ShapeId, CommandError> {
+    if op.kernel != services.kernel.name() {
+        return Err(CommandError::Failed(format!(
+            "recipe requires kernel `{}`, attached is `{}` — refusing to guess",
+            op.kernel,
+            services.kernel.name()
+        )));
+    }
+    let k = &*services.kernel;
+    let p = &op.params;
+    let shape = match op.kind.as_str() {
+        "create_box" => {
+            let [x, y, z] = vec3(p, "size_mm")?;
+            k.make_box(x, y, z)
+        }
+        "create_cylinder" => {
+            let r = scalar(p, "radius_mm")?;
+            let h = scalar(p, "height_mm")?;
+            k.make_cylinder(r, h)
+        }
+        "create_sphere" => k.make_sphere(scalar(p, "radius_mm")?),
+        "boolean" => {
+            let a_id: worldos_kernel::ids::ObjectId = p["a"]
+                .as_str()
+                .and_then(|s| s.parse().ok())
+                .ok_or_else(|| CommandError::Failed("boolean recipe missing `a`".into()))?;
+            let b_id: worldos_kernel::ids::ObjectId = p["b"]
+                .as_str()
+                .and_then(|s| s.parse().ok())
+                .ok_or_else(|| CommandError::Failed("boolean recipe missing `b`".into()))?;
+            let bool_op = match p["op"].as_str().unwrap_or_default() {
+                "union" => worldos_cad::BoolOp::Union,
+                "subtract" => worldos_cad::BoolOp::Subtract,
+                "intersect" => worldos_cad::BoolOp::Intersect,
+                o => return Err(CommandError::Failed(format!("bad boolean op `{o}`"))),
+            };
+            let (a, _) = load_shape_id(ctx, services, a_id)?;
+            let (b, _) = load_shape_id(ctx, services, b_id)?;
+            let out = k.boolean(a, b, bool_op);
+            k.drop_shape(a);
+            k.drop_shape(b);
+            out
+        }
+        "fillet" | "chamfer" => {
+            let src: worldos_kernel::ids::ObjectId = p["source"]
+                .as_str()
+                .and_then(|s| s.parse().ok())
+                .ok_or_else(|| CommandError::Failed("recipe missing `source`".into()))?;
+            let (sid, _) = load_shape_id(ctx, services, src)?;
+            let edge_ids: Vec<u64> = p
+                .get("edge_ids")
+                .and_then(|v| v.as_array())
+                .map(|a| a.iter().filter_map(|x| x.as_u64()).collect())
+                .unwrap_or_default();
+            let out = if op.kind == "fillet" {
+                k.fillet(sid, scalar(p, "radius_mm")?, &edge_ids)
+            } else {
+                k.chamfer(sid, scalar(p, "distance_mm")?, &edge_ids)
+            };
+            k.drop_shape(sid);
+            out
+        }
+        "transform" => {
+            let src: worldos_kernel::ids::ObjectId = p["source"]
+                .as_str()
+                .and_then(|s| s.parse().ok())
+                .ok_or_else(|| CommandError::Failed("recipe missing `source`".into()))?;
+            let ops: Vec<worldos_cad::TransformOp> = serde_json::from_value(p["ops"].clone())
+                .map_err(|e| CommandError::Failed(format!("bad transform ops: {e}")))?;
+            let (sid, _) = load_shape_id(ctx, services, src)?;
+            let out = k.transform(sid, &ops);
+            k.drop_shape(sid);
+            out
+        }
+        "import_step" => {
+            let r = p["step"]
+                .as_str()
+                .ok_or_else(|| CommandError::Failed("import recipe missing `step` ref".into()))?;
+            let aref: worldos_artifact::ArtifactRef =
+                r.parse().map_err(|e: worldos_artifact::ArtifactError| {
+                    CommandError::Failed(format!("bad step ref: {e}"))
+                })?;
+            let bytes = services
+                .artifacts()
+                .get(&aref)
+                .map_err(|e| CommandError::Failed(format!("step artifact: {e}")))?;
+            k.import_step(&bytes)
+        }
+        other => {
+            return Err(CommandError::Failed(format!(
+                "recipe kind `{other}` is not regenerable"
+            )));
+        }
+    }
+    .map_err(|e| CommandError::Failed(format!("regen `{}` failed: {e}", op.kind)))?;
+
+    // position bake (create recipes carry it in params)
+    let delta = p.get("position").and_then(|v| v.as_array()).and_then(|a| {
+        if a.len() != 3 {
+            return None;
+        }
+        let d = [a[0].as_f64()?, a[1].as_f64()?, a[2].as_f64()?];
+        d.iter().any(|x| x.abs() > 0.0).then_some(d)
+    });
+    if let Some(delta) = delta {
+        let moved = k
+            .transform(
+                shape,
+                &[worldos_cad::TransformOp::Translate { delta_mm: delta }],
+            )
+            .map_err(|e| CommandError::Failed(format!("position bake failed: {e}")))?;
+        k.drop_shape(shape);
+        return Ok(moved);
+    }
+    Ok(shape)
+}
+
+/// Regenerate `id` from its stored recipe and rewrite `cad:shape` +
+/// `cad:operation` in place. All kernel work happens BEFORE any graph
+/// write — a kernel failure leaves the object untouched. Old STEP/STL
+/// refs are dropped (they describe stale geometry). Direct dependents
+/// (`core:derived-from` edges) are flagged stale.
+fn regen_object(
+    ctx: &mut CommandContext,
+    services: &CadServices,
+    id: worldos_kernel::ids::ObjectId,
+    op: worldos_cad::CadOperation,
+) -> Result<worldos_cad::CadShape, CommandError> {
+    let shape = regen(ctx, services, &op)?;
+    let k = &services.kernel;
+    let topology = k
+        .topology(shape)
+        .map_err(|e| CommandError::Failed(format!("topology: {e}")))?;
+    let measures = k
+        .measure(shape)
+        .map_err(|e| CommandError::Failed(format!("measure: {e}")))?;
+    let brep_bytes = k
+        .export_brep(shape)
+        .map_err(|e| CommandError::Failed(format!("brep export: {e}")))?;
+    k.drop_shape(shape);
+    if !topology.is_valid {
+        return Err(CommandError::Failed(
+            "regenerated shape is invalid (non-positive volume or no topology)".into(),
+        ));
+    }
+    let put = services
+        .artifacts()
+        .put(&brep_bytes)
+        .map_err(|e| CommandError::Failed(format!("artifact store: {e}")))?;
+
+    let mut state = worldos_cad::CadShape::new(
+        put.artifact_ref.to_string(),
+        k.name(),
+        "cad.regenerate",
+        measures,
+        topology,
+    );
+
+    // everything below is graph writes — kernel work is done
+    ctx.update_object(id, |obj| {
+        if let Ok(v) = serde_json::to_value(&op) {
+            obj.set_component(worldos_kernel::model::Component::new(
+                components::CAD_OPERATION,
+                v,
+            ));
+        }
+        if let Ok(v) = serde_json::to_value(&state) {
+            obj.set_component(worldos_kernel::model::Component::new(
+                components::CAD_SHAPE,
+                v,
+            ));
+        }
+    })?;
+
+    let dependents: Vec<worldos_kernel::ids::ObjectId> = ctx
+        .project
+        .relations_to(id)
+        .filter(|r| r.type_id == worldos_kernel::known::rel::DERIVED_FROM)
+        .map(|r| r.from)
+        .collect();
+    for dep in dependents {
+        ctx.update_object(dep, |obj| {
+            if let Some(data) = obj.component_data(components::CAD_SHAPE)
+                && let Ok(mut s) = serde_json::from_value::<worldos_cad::CadShape>(data.clone())
+            {
+                s.stale = true;
+                if let Ok(v) = serde_json::to_value(&s) {
+                    obj.set_component(worldos_kernel::model::Component::new(
+                        components::CAD_SHAPE,
+                        v,
+                    ));
+                }
+            }
+        })?;
+    }
+    state.stale = false; // report the post-write truth
+    Ok(state)
+}
+
+/// `cad.set_param` — merge params into the `cad:operation` recipe and
+/// regenerate the shape in place (object identity preserved).
+pub struct CadSetParam {
+    services: Arc<CadServices>,
+}
+
+impl CadSetParam {
+    pub fn new(services: Arc<CadServices>) -> Self {
+        Self { services }
+    }
+}
+
+impl CommandHandler for CadSetParam {
+    fn schema(&self) -> CommandSchema {
+        CommandSchema::write(
+            "cad.set_param",
+            "cad",
+            "Merge params into a cad:body's recipe and regenerate in place; dependents go stale",
+            props::object(
+                &["object", "params"],
+                json!({
+                    "object": {"type": "string", "description": "id or name"},
+                    "params": {"type": "object", "description": "recipe fields to merge, e.g. {\"size_mm\":[60,40,20]}"}
+                }),
+            ),
+        )
+    }
+
+    fn execute(&self, ctx: &mut CommandContext, input: &Value) -> Result<Value, CommandError> {
+        let target = input
+            .get("object")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| CommandError::Failed("missing `object`".into()))?;
+        let lookup = if target.parse::<worldos_kernel::ids::ObjectId>().is_ok() {
+            json!({"id": target})
+        } else {
+            json!({"name": target})
+        };
+        let id = crate::builtin::resolve_object(ctx, &lookup)?;
+        let obj = ctx
+            .project
+            .get(id)
+            .ok_or_else(|| CommandError::Failed("object vanished mid-command".into()))?;
+        if obj.type_id.0 != types::CAD_BODY {
+            return Err(CommandError::Failed("not a cad:body".into()));
+        }
+        let mut op: worldos_cad::CadOperation = serde_json::from_value(
+            obj.component_data(components::CAD_OPERATION)
+                .ok_or_else(|| CommandError::Failed("no cad:operation component".into()))?
+                .clone(),
+        )
+        .map_err(|e| CommandError::Failed(format!("bad cad:operation: {e}")))?;
+
+        // shallow-merge provided params into the recipe
+        let patch = input["params"]
+            .as_object()
+            .ok_or_else(|| CommandError::Failed("`params` must be an object".into()))?;
+        let base = op
+            .params
+            .as_object_mut()
+            .ok_or_else(|| CommandError::Failed("recipe params not an object".into()))?;
+        for (key, val) in patch {
+            base.insert(key.clone(), val.clone());
+        }
+
+        let state = regen_object(ctx, &self.services, id, op)?;
+        Ok(json!({
+            "id": id.to_string(),
+            "brep": state.brep,
+            "measures": serde_json::to_value(state.measures).unwrap_or(Value::Null),
+            "topology": serde_json::to_value(&state.topology).unwrap_or(Value::Null),
+        }))
+    }
+}
+
+/// `cad.regenerate` — replay a body's stored recipe (used after a
+/// source changed and the object was flagged stale).
+pub struct CadRegenerate {
+    services: Arc<CadServices>,
+}
+
+impl CadRegenerate {
+    pub fn new(services: Arc<CadServices>) -> Self {
+        Self { services }
+    }
+}
+
+impl CommandHandler for CadRegenerate {
+    fn schema(&self) -> CommandSchema {
+        CommandSchema::write(
+            "cad.regenerate",
+            "cad",
+            "Replay a cad:body's cad:operation recipe and rebuild derived state",
+            props::object(
+                &["object"],
+                json!({
+                    "object": {"type": "string", "description": "id or name"}
+                }),
+            ),
+        )
+    }
+
+    fn execute(&self, ctx: &mut CommandContext, input: &Value) -> Result<Value, CommandError> {
+        let target = input
+            .get("object")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| CommandError::Failed("missing `object`".into()))?;
+        let lookup = if target.parse::<worldos_kernel::ids::ObjectId>().is_ok() {
+            json!({"id": target})
+        } else {
+            json!({"name": target})
+        };
+        let id = crate::builtin::resolve_object(ctx, &lookup)?;
+        let obj = ctx
+            .project
+            .get(id)
+            .ok_or_else(|| CommandError::Failed("object vanished mid-command".into()))?;
+        if obj.type_id.0 != types::CAD_BODY {
+            return Err(CommandError::Failed("not a cad:body".into()));
+        }
+        let op: worldos_cad::CadOperation = serde_json::from_value(
+            obj.component_data(components::CAD_OPERATION)
+                .ok_or_else(|| CommandError::Failed("no cad:operation component".into()))?
+                .clone(),
+        )
+        .map_err(|e| CommandError::Failed(format!("bad cad:operation: {e}")))?;
+
+        let state = regen_object(ctx, &self.services, id, op)?;
+        Ok(json!({
+            "id": id.to_string(),
+            "brep": state.brep,
+            "measures": serde_json::to_value(state.measures).unwrap_or(Value::Null),
+            "topology": serde_json::to_value(&state.topology).unwrap_or(Value::Null),
+        }))
     }
 }
 
@@ -933,6 +1300,8 @@ pub fn cad_handlers(services: Arc<CadServices>) -> Vec<Arc<dyn CommandHandler>> 
         Arc::new(CadMeasure::new(services.clone())),
         Arc::new(CadExportStep::new(services.clone())),
         Arc::new(CadExportStl::new(services.clone())),
-        Arc::new(CadImportStep::new(services)),
+        Arc::new(CadImportStep::new(services.clone())),
+        Arc::new(CadSetParam::new(services.clone())),
+        Arc::new(CadRegenerate::new(services)),
     ]
 }

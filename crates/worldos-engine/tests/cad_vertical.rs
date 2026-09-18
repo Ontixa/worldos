@@ -370,3 +370,142 @@ fn feature_chain_boolean_fillet_chamfer_transform_import() {
             .is_err()
     );
 }
+
+#[test]
+fn set_param_regenerates_and_propagates_staleness() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("param.worldos");
+
+    let mut engine = Engine::create("param", &path).unwrap();
+    engine.attach_cad(Arc::new(CadrumKernel::new())).unwrap();
+
+    engine
+        .execute(
+            "cad.create_box",
+            json!({"size_mm": [50.0, 40.0, 20.0], "name": "block"}),
+        )
+        .unwrap();
+    engine
+        .execute(
+            "cad.create_cylinder",
+            json!({"radius_mm": 5.0, "height_mm": 30.0,
+                   "position": [25.0, 20.0, -5.0], "name": "tool"}),
+        )
+        .unwrap();
+    engine
+        .execute(
+            "cad.boolean",
+            json!({"a": "block", "b": "tool", "op": "subtract", "name": "plate"}),
+        )
+        .unwrap();
+    let hole = std::f64::consts::PI * 25.0 * 20.0;
+    let plate_of = |engine: &Engine| {
+        engine
+            .project()
+            .find_by_name("plate")
+            .unwrap()
+            .component_data(worldos_kernel::known::components::CAD_SHAPE)
+            .unwrap()
+            .clone()
+    };
+    assert!(!plate_of(&engine)["stale"].as_bool().unwrap_or(false));
+
+    // set_param on the source primitive — same object, new geometry
+    let out = engine
+        .execute(
+            "cad.set_param",
+            json!({"object": "block", "params": {"size_mm": [100.0, 40.0, 20.0]}}),
+        )
+        .unwrap();
+    assert!(approx_relative(
+        out.output["measures"]["volume_mm3"].as_f64().unwrap(),
+        80_000.0
+    ));
+    // object identity preserved through regeneration
+    let block = engine.project().find_by_name("block").unwrap();
+    let op = block
+        .component_data(worldos_kernel::known::components::CAD_OPERATION)
+        .unwrap();
+    assert_eq!(op["params"]["size_mm"][0].as_f64().unwrap(), 100.0);
+
+    // the derived plate is now stale — its hole recipe references a
+    // changed source
+    assert!(plate_of(&engine)["stale"].as_bool().unwrap());
+
+    // regenerate the plate: hole through the wider block
+    let regen = engine
+        .execute("cad.regenerate", json!({"object": "plate"}))
+        .unwrap();
+    assert!(approx_relative(
+        regen.output["measures"]["volume_mm3"].as_f64().unwrap(),
+        80_000.0 - hole
+    ));
+    assert!(!plate_of(&engine)["stale"].as_bool().unwrap());
+
+    // undo restores BOTH the old shape and the plate's stale flag —
+    // one transaction, exact inverse
+    engine.undo().unwrap(); // regenerate
+    assert!(plate_of(&engine)["stale"].as_bool().unwrap());
+    engine.undo().unwrap(); // set_param
+    assert!(!plate_of(&engine)["stale"].as_bool().unwrap());
+    let m = engine
+        .execute("cad.measure", json!({"object": "block"}))
+        .unwrap();
+    assert!(approx_relative(
+        m.output["measures"]["volume_mm3"].as_f64().unwrap(),
+        40_000.0
+    ));
+
+    // save/reopen: recipes + artifacts survive; regenerate yields the
+    // same verified result
+    engine.save().unwrap();
+    drop(engine);
+    let mut engine2 = Engine::open(&path).unwrap();
+    engine2.attach_cad(Arc::new(CadrumKernel::new())).unwrap();
+    let out2 = engine2
+        .execute(
+            "cad.set_param",
+            json!({"object": "block", "params": {"size_mm": [60.0, 40.0, 20.0]}}),
+        )
+        .unwrap();
+    assert!(approx_relative(
+        out2.output["measures"]["volume_mm3"].as_f64().unwrap(),
+        48_000.0
+    ));
+    let regen2 = engine2
+        .execute("cad.regenerate", json!({"object": "plate"}))
+        .unwrap();
+    assert!(approx_relative(
+        regen2.output["measures"]["volume_mm3"].as_f64().unwrap(),
+        48_000.0 - hole
+    ));
+
+    // a failed regen must not corrupt state: delete the tool object,
+    // then the plate's recipe cannot resolve source `b`
+    engine2
+        .execute(
+            "object.delete",
+            json!({"id": engine2.project().find_by_name("tool").unwrap().id.to_string()}),
+        )
+        .unwrap();
+    let before = engine2
+        .project()
+        .find_by_name("plate")
+        .unwrap()
+        .component_data(worldos_kernel::known::components::CAD_SHAPE)
+        .unwrap()
+        .clone();
+    assert!(
+        engine2
+            .execute("cad.regenerate", json!({"object": "plate"}))
+            .is_err()
+    );
+    let after = engine2
+        .project()
+        .find_by_name("plate")
+        .unwrap()
+        .component_data(worldos_kernel::known::components::CAD_SHAPE)
+        .unwrap()
+        .clone();
+    assert_eq!(before, after, "failed regen must not mutate cad:shape");
+}

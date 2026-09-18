@@ -62,6 +62,11 @@ pub struct CadShape {
     pub generator: String,
     pub measures: Measures,
     pub topology: Topology,
+    /// True when a `core:derived-from` source changed after this state
+    /// was produced — the recipe should be replayed (`cad.regenerate`)
+    /// before trusting these outputs.
+    #[serde(default)]
+    pub stale: bool,
 }
 
 impl CadShape {
@@ -81,6 +86,7 @@ impl CadShape {
             generator: generator.into(),
             measures,
             topology,
+            stale: false,
         }
     }
 }
