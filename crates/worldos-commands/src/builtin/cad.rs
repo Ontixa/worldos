@@ -60,6 +60,9 @@ struct ShapeMeta {
     name: String,
     position: Value,
     parent: Option<Value>,
+    /// Source objects this body was derived from — emits
+    /// `core:derived-from` edges (the feature-tree lineage).
+    sources: Vec<worldos_kernel::ids::ObjectId>,
 }
 
 /// After the kernel produced `shape`: persist BRep, read verified
@@ -69,7 +72,7 @@ fn finalize_shape(
     services: &CadServices,
     shape: ShapeId,
     op_kind: &str,
-    params: Value,
+    mut params: Value,
     generator: &str,
     meta: ShapeMeta,
 ) -> Result<Value, CommandError> {
@@ -77,8 +80,31 @@ fn finalize_shape(
         name,
         position,
         parent,
+        sources,
     } = meta;
     let kernel = &services.kernel;
+    // `position` is baked into the BRep: geometry is world-space truth,
+    // not just transform metadata — booleans/measures must agree with
+    // what the graph claims.
+    let mut shape = shape;
+    let delta = position.as_array().and_then(|a| {
+        if a.len() != 3 {
+            return None;
+        }
+        let d = [a[0].as_f64()?, a[1].as_f64()?, a[2].as_f64()?];
+        d.iter().any(|x| x.abs() > 0.0).then_some(d)
+    });
+    if let Some(delta) = delta {
+        let moved = kernel
+            .transform(
+                shape,
+                &[worldos_cad::TransformOp::Translate { delta_mm: delta }],
+            )
+            .map_err(|e| CommandError::Failed(format!("position bake failed: {e}")))?;
+        kernel.drop_shape(shape);
+        shape = moved;
+        params["position"] = json!(delta);
+    }
     let brep_bytes = kernel
         .export_brep(shape)
         .map_err(|e| CommandError::Failed(format!("brep export failed: {e}")))?;
@@ -130,6 +156,22 @@ fn finalize_shape(
         .run_sub("object.create", args)
         .map_err(|e| CommandError::Failed(format!("object.create failed: {e}")))?["id"]
         .clone();
+
+    if !sources.is_empty() {
+        let oid: worldos_kernel::ids::ObjectId = id
+            .as_str()
+            .unwrap_or_default()
+            .parse()
+            .map_err(|_| CommandError::Failed("bad id from object.create".into()))?;
+        for src in sources {
+            ctx.put_relation(worldos_kernel::model::Relation::new(
+                worldos_kernel::known::rel::DERIVED_FROM,
+                oid,
+                src,
+                &ctx.actor.id,
+            ))?;
+        }
+    }
 
     Ok(json!({
         "id": id,
@@ -191,6 +233,7 @@ macro_rules! cad_create {
                         name,
                         position: position_of(input),
                         parent: input.get("parent").cloned(),
+                        sources: vec![],
                     },
                 )
             }
@@ -539,6 +582,343 @@ cad_export!(
     stl
 );
 
+/// `cad.boolean` — union/subtract/intersect of two bodies → new body.
+pub struct CadBoolean {
+    services: Arc<CadServices>,
+}
+
+impl CadBoolean {
+    pub fn new(services: Arc<CadServices>) -> Self {
+        Self { services }
+    }
+}
+
+impl CommandHandler for CadBoolean {
+    fn schema(&self) -> CommandSchema {
+        CommandSchema::write(
+            "cad.boolean",
+            "cad",
+            "Boolean union/subtract/intersect of two cad:body objects -> new derived body",
+            props::object(
+                &["a", "b", "op"],
+                json!({
+                    "a": {"type": "string", "description": "id or name"},
+                    "b": {"type": "string", "description": "id or name"},
+                    "op": {"type": "string", "enum": ["union", "subtract", "intersect"]},
+                    "name": {"type": "string"},
+                    "parent": {"type": "string"}
+                }),
+            ),
+        )
+    }
+
+    fn execute(&self, ctx: &mut CommandContext, input: &Value) -> Result<Value, CommandError> {
+        let op = match input["op"].as_str().unwrap_or_default() {
+            "union" => worldos_cad::BoolOp::Union,
+            "subtract" => worldos_cad::BoolOp::Subtract,
+            "intersect" => worldos_cad::BoolOp::Intersect,
+            other => {
+                return Err(CommandError::Failed(format!(
+                    "unknown boolean op `{other}`"
+                )));
+            }
+        };
+        let (a_id, a_shape, _) = load_shape(ctx, &self.services, &json!({"object": input["a"]}))?;
+        let (b_id, b_shape, _) = load_shape(ctx, &self.services, &json!({"object": input["b"]}))?;
+        let out = self
+            .services
+            .kernel
+            .boolean(a_shape, b_shape, op)
+            .map_err(|e| CommandError::Failed(format!("boolean failed: {e}")))?;
+        self.services.kernel.drop_shape(a_shape);
+        self.services.kernel.drop_shape(b_shape);
+
+        let name = input
+            .get("name")
+            .and_then(|n| n.as_str())
+            .map(String::from)
+            .unwrap_or_else(|| auto_name(ctx, "boolean"));
+        finalize_shape(
+            ctx,
+            &self.services,
+            out,
+            "boolean",
+            json!({
+                "a": a_id.to_string(),
+                "b": b_id.to_string(),
+                "op": input["op"].as_str().unwrap_or_default(),
+            }),
+            "cad.boolean",
+            ShapeMeta {
+                name,
+                position: json!([0, 0, 0]),
+                parent: input.get("parent").cloned(),
+                sources: vec![a_id, b_id],
+            },
+        )
+    }
+}
+
+macro_rules! cad_feature {
+    ($name:ident, $cmd:literal, $doc:literal, $kind:literal, $param_key:literal, $unit:literal, $call:expr) => {
+        pub struct $name {
+            services: Arc<CadServices>,
+        }
+
+        impl $name {
+            pub fn new(services: Arc<CadServices>) -> Self {
+                Self { services }
+            }
+        }
+
+        impl CommandHandler for $name {
+            fn schema(&self) -> CommandSchema {
+                CommandSchema::write(
+                    $cmd,
+                    "cad",
+                    $doc,
+                    props::object(
+                        &["object", $param_key],
+                        json!({
+                            "object": {"type": "string", "description": "id or name"},
+                            $param_key: {"type": "number", "description": $unit},
+                            "edge_ids": {
+                                "type": "array",
+                                "items": {"type": "integer"},
+                                "description": "kernel edge ids from cad:shape.topology; empty = all edges"
+                            },
+                            "name": {"type": "string"},
+                            "parent": {"type": "string"}
+                        }),
+                    ),
+                )
+            }
+
+            fn execute(
+                &self,
+                ctx: &mut CommandContext,
+                input: &Value,
+            ) -> Result<Value, CommandError> {
+                let amount = scalar(input, $param_key)?;
+                let edge_ids: Vec<u64> = input
+                    .get("edge_ids")
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.iter().filter_map(|x| x.as_u64()).collect())
+                    .unwrap_or_default();
+                let (src_id, src_shape, _) = load_shape(ctx, &self.services, input)?;
+                let apply: fn(&dyn CadKernel, ShapeId, f64, &[u64]) -> Result<ShapeId, worldos_cad::CadError> =
+                    $call;
+                let out = apply(&*self.services.kernel, src_shape, amount, &edge_ids)
+                    .map_err(|e| CommandError::Failed(format!("{} failed: {e}", $kind)))?;
+                self.services.kernel.drop_shape(src_shape);
+
+                let name = input
+                    .get("name")
+                    .and_then(|n| n.as_str())
+                    .map(String::from)
+                    .unwrap_or_else(|| auto_name(ctx, $kind));
+                finalize_shape(
+                    ctx,
+                    &self.services,
+                    out,
+                    $kind,
+                    json!({
+                        "source": src_id.to_string(),
+                        $param_key: amount,
+                        "edge_ids": edge_ids,
+                    }),
+                    $cmd,
+                    ShapeMeta {
+                        name,
+                        position: json!([0, 0, 0]),
+                        parent: input.get("parent").cloned(),
+                        sources: vec![src_id],
+                    },
+                )
+            }
+        }
+    };
+}
+
+cad_feature!(
+    CadFillet,
+    "cad.fillet",
+    "Fillet edges of a cad:body -> new derived body",
+    "fillet",
+    "radius_mm",
+    "fillet radius in mm",
+    |k: &dyn CadKernel, s, r, e| k.fillet(s, r, e)
+);
+
+cad_feature!(
+    CadChamfer,
+    "cad.chamfer",
+    "Chamfer edges of a cad:body -> new derived body",
+    "chamfer",
+    "distance_mm",
+    "chamfer distance in mm",
+    |k: &dyn CadKernel, s, d, e| k.chamfer(s, d, e)
+);
+
+/// `cad.transform` — rigid/affine transform chain -> new derived body.
+pub struct CadTransform {
+    services: Arc<CadServices>,
+}
+
+impl CadTransform {
+    pub fn new(services: Arc<CadServices>) -> Self {
+        Self { services }
+    }
+}
+
+impl CommandHandler for CadTransform {
+    fn schema(&self) -> CommandSchema {
+        CommandSchema::write(
+            "cad.transform",
+            "cad",
+            "Apply translate/rotate_axis/scale steps to a cad:body -> new derived body",
+            props::object(
+                &["object", "ops"],
+                json!({
+                    "object": {"type": "string"},
+                    "ops": {
+                        "type": "array",
+                        "items": {"type": "object"},
+                        "description": "TransformOp list, internally tagged: {kind:translate,delta_mm:[x,y,z]} | {kind:rotate_axis,origin_mm:[x,y,z],dir:[x,y,z],angle_rad:f} | {kind:scale,center_mm:[x,y,z],factor:f}"
+                    },
+                    "name": {"type": "string"},
+                    "parent": {"type": "string"}
+                }),
+            ),
+        )
+    }
+
+    fn execute(&self, ctx: &mut CommandContext, input: &Value) -> Result<Value, CommandError> {
+        let ops: Vec<worldos_cad::TransformOp> = serde_json::from_value(input["ops"].clone())
+            .map_err(|e| CommandError::Failed(format!("bad ops: {e}")))?;
+        if ops.is_empty() {
+            return Err(CommandError::Failed("ops must not be empty".into()));
+        }
+        let (src_id, src_shape, _) = load_shape(ctx, &self.services, input)?;
+        let out = self
+            .services
+            .kernel
+            .transform(src_shape, &ops)
+            .map_err(|e| CommandError::Failed(format!("transform failed: {e}")))?;
+        self.services.kernel.drop_shape(src_shape);
+
+        let name = input
+            .get("name")
+            .and_then(|n| n.as_str())
+            .map(String::from)
+            .unwrap_or_else(|| auto_name(ctx, "transform"));
+        finalize_shape(
+            ctx,
+            &self.services,
+            out,
+            "transform",
+            json!({
+                "source": src_id.to_string(),
+                "ops": serde_json::to_value(&ops).unwrap_or(Value::Null),
+            }),
+            "cad.transform",
+            ShapeMeta {
+                name,
+                position: json!([0, 0, 0]),
+                parent: input.get("parent").cloned(),
+                sources: vec![src_id],
+            },
+        )
+    }
+}
+
+/// `cad.import_step` — load a STEP file (artifact ref or filesystem
+/// path) into a new cad:body.
+pub struct CadImportStep {
+    services: Arc<CadServices>,
+}
+
+impl CadImportStep {
+    pub fn new(services: Arc<CadServices>) -> Self {
+        Self { services }
+    }
+}
+
+impl CommandHandler for CadImportStep {
+    fn schema(&self) -> CommandSchema {
+        CommandSchema::write(
+            "cad.import_step",
+            "cad",
+            "Import STEP into a new cad:body (from artifact ref `step` or `file` path)",
+            props::object(
+                &[],
+                json!({
+                    "step": {"type": "string", "description": "artifact ref sha256:<hex>"},
+                    "file": {"type": "string", "description": "filesystem path (needs filesystem.read)"},
+                    "name": {"type": "string"},
+                    "parent": {"type": "string"}
+                }),
+            ),
+        )
+    }
+
+    fn execute(&self, ctx: &mut CommandContext, input: &Value) -> Result<Value, CommandError> {
+        let bytes = if let Some(r) = input.get("step").and_then(|v| v.as_str()) {
+            let aref: worldos_artifact::ArtifactRef =
+                r.parse().map_err(|e: worldos_artifact::ArtifactError| {
+                    CommandError::Failed(format!("bad artifact ref: {e}"))
+                })?;
+            self.services
+                .artifacts()
+                .get(&aref)
+                .map_err(|e| CommandError::Failed(format!("step artifact: {e}")))?
+        } else if let Some(f) = input.get("file").and_then(|v| v.as_str()) {
+            if !ctx
+                .actor
+                .permissions
+                .is_allowed(&worldos_kernel::actor::Permission(
+                    worldos_kernel::known::permissions::FILESYSTEM_READ.into(),
+                ))
+            {
+                return Err(CommandError::PermissionDenied {
+                    command: "cad.import_step".into(),
+                    perm: worldos_kernel::known::permissions::FILESYSTEM_READ.into(),
+                });
+            }
+            std::fs::read(f).map_err(|e| CommandError::Failed(format!("cannot read `{f}`: {e}")))?
+        } else {
+            return Err(CommandError::Failed(
+                "provide `step` (artifact ref) or `file` (path)".into(),
+            ));
+        };
+
+        let shape = self
+            .services
+            .kernel
+            .import_step(&bytes)
+            .map_err(|e| CommandError::Failed(format!("step import failed: {e}")))?;
+        let name = input
+            .get("name")
+            .and_then(|n| n.as_str())
+            .map(String::from)
+            .unwrap_or_else(|| auto_name(ctx, "import"));
+        finalize_shape(
+            ctx,
+            &self.services,
+            shape,
+            "import_step",
+            json!({"bytes": bytes.len(), "source": input.get("step").cloned().or_else(|| input.get("file").cloned()).unwrap_or(Value::Null)}),
+            "cad.import_step",
+            ShapeMeta {
+                name,
+                position: json!([0, 0, 0]),
+                parent: input.get("parent").cloned(),
+                sources: vec![],
+            },
+        )
+    }
+}
+
 /// CAD handlers that need kernel+artifact services, for
 /// `Engine::attach_cad`.
 pub fn cad_handlers(services: Arc<CadServices>) -> Vec<Arc<dyn CommandHandler>> {
@@ -546,8 +926,13 @@ pub fn cad_handlers(services: Arc<CadServices>) -> Vec<Arc<dyn CommandHandler>> 
         Arc::new(CadCreateBox::new(services.clone())),
         Arc::new(CadCreateCylinder::new(services.clone())),
         Arc::new(CadCreateSphere::new(services.clone())),
+        Arc::new(CadBoolean::new(services.clone())),
+        Arc::new(CadFillet::new(services.clone())),
+        Arc::new(CadChamfer::new(services.clone())),
+        Arc::new(CadTransform::new(services.clone())),
         Arc::new(CadMeasure::new(services.clone())),
         Arc::new(CadExportStep::new(services.clone())),
-        Arc::new(CadExportStl::new(services)),
+        Arc::new(CadExportStl::new(services.clone())),
+        Arc::new(CadImportStep::new(services)),
     ]
 }

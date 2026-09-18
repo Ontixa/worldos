@@ -52,7 +52,7 @@ fn create_measure_step_reimport_undo_redo_save_reopen_regenerate() {
     ));
     assert_eq!(out.output["topology"]["faces"].as_u64().unwrap(), 6);
     assert_eq!(out.output["topology"]["edges"].as_u64().unwrap(), 12);
-    assert_eq!(out.output["topology"]["is_valid"].as_bool().unwrap(), true);
+    assert!(out.output["topology"]["is_valid"].as_bool().unwrap());
 
     // artifact really on disk in the sidecar
     let art_dir = sidecar(&path);
@@ -221,4 +221,152 @@ fn artifacts_follow_save_as() {
         m.output["measures"]["volume_mm3"].as_f64().unwrap(),
         1000.0
     ));
+}
+
+#[test]
+fn feature_chain_boolean_fillet_chamfer_transform_import() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("chain.worldos");
+
+    let mut engine = Engine::create("chain", &path).unwrap();
+    engine.attach_cad(Arc::new(CadrumKernel::new())).unwrap();
+
+    // block 50x40x20 (40_000 mm3) with a centered cylinder tool
+    let block = engine
+        .execute(
+            "cad.create_box",
+            json!({"size_mm": [50.0, 40.0, 20.0], "name": "block"}),
+        )
+        .unwrap();
+    let block_id = block.output["id"].as_str().unwrap().to_string();
+    engine
+        .execute(
+            "cad.create_cylinder",
+            json!({"radius_mm": 5.0, "height_mm": 30.0, "name": "tool",
+                   "position": [25.0, 20.0, -5.0]}),
+        )
+        .unwrap();
+
+    // boolean subtract -> hole through the block
+    let cut = engine
+        .execute(
+            "cad.boolean",
+            json!({"a": "block", "b": "tool", "op": "subtract", "name": "plate"}),
+        )
+        .unwrap();
+    let plate_id = cut.output["id"].as_str().unwrap().to_string();
+    let hole = std::f64::consts::PI * 25.0 * 20.0; // pi r^2 h through 20 mm
+    assert!(approx_relative(
+        cut.output["measures"]["volume_mm3"].as_f64().unwrap(),
+        40_000.0 - hole
+    ));
+    assert!(cut.output["topology"]["is_valid"].as_bool().unwrap());
+
+    // derived-from edges exist (feature-tree lineage)
+    let derived: Vec<String> = engine
+        .project()
+        .relations_from(plate_id.parse().unwrap())
+        .filter(|r| r.type_id == worldos_kernel::known::rel::DERIVED_FROM)
+        .map(|r| r.to.to_string())
+        .collect();
+    assert_eq!(derived.len(), 2);
+    assert!(derived.contains(&block_id));
+
+    // union puts material back (block fused with a boss)
+    let union = engine
+        .execute(
+            "cad.boolean",
+            json!({"a": "block", "b": "tool", "op": "union"}),
+        )
+        .unwrap();
+    assert!(union.output["measures"]["volume_mm3"].as_f64().unwrap() > 40_000.0);
+
+    // fillet + chamfer reduce volume and stay valid solids
+    let fillet = engine
+        .execute(
+            "cad.fillet",
+            json!({"object": "plate", "radius_mm": 1.0, "name": "plate_f"}),
+        )
+        .unwrap();
+    let fv = fillet.output["measures"]["volume_mm3"].as_f64().unwrap();
+    assert!(fv < 40_000.0 - hole + 1.0);
+    assert!(fillet.output["topology"]["is_valid"].as_bool().unwrap());
+
+    let chamfer = engine
+        .execute(
+            "cad.chamfer",
+            json!({"object": "plate", "distance_mm": 0.8}),
+        )
+        .unwrap();
+    assert!(chamfer.output["topology"]["is_valid"].as_bool().unwrap());
+
+    // transform: translate + uniform scale -> volume scales by factor^3
+    let moved = engine
+        .execute(
+            "cad.transform",
+            json!({"object": "block",
+                   "ops": [
+                       {"kind": "translate", "delta_mm": [100.0, 0.0, 0.0]},
+                       {"kind": "scale", "center_mm": [0.0, 0.0, 0.0], "factor": 2.0}
+                   ],
+                   "name": "block2x"}),
+        )
+        .unwrap();
+    assert!(approx_relative(
+        moved.output["measures"]["volume_mm3"].as_f64().unwrap(),
+        40_000.0 * 8.0
+    ));
+    let bbox = &moved.output["measures"]["bbox"];
+    assert!(bbox["min_mm"][0].as_f64().unwrap() > 150.0); // translated+scaled
+
+    // STEP round-trip through the semantic layer: export plate, reimport
+    let ex = engine
+        .execute("cad.export_step", json!({"object": "plate"}))
+        .unwrap();
+    let step_ref = ex.output["step"].as_str().unwrap();
+    let imp = engine
+        .execute(
+            "cad.import_step",
+            json!({"step": step_ref, "name": "plate_re"}),
+        )
+        .unwrap();
+    assert!(approx_relative(
+        imp.output["measures"]["volume_mm3"].as_f64().unwrap(),
+        40_000.0 - hole
+    ));
+    assert!(imp.output["topology"]["is_valid"].as_bool().unwrap());
+
+    // every derived object is undoable. History tail is
+    // [.., transform, export_step, import_step] so undoing walks it back.
+    engine.undo().unwrap(); // import_step
+    assert!(engine.project().find_by_name("plate_re").is_none());
+    engine.undo().unwrap(); // export_step (step ref on plate)
+    engine.undo().unwrap(); // transform
+    assert!(engine.project().find_by_name("block2x").is_none());
+    engine.undo().unwrap(); // chamfer
+    engine.undo().unwrap(); // fillet
+    assert!(engine.project().find_by_name("plate_f").is_none());
+    // redo one step back
+    engine.redo().unwrap();
+    assert!(engine.project().find_by_name("plate_f").is_some());
+
+    // bad inputs fail at schema/feature level, never panic
+    assert!(
+        engine
+            .execute(
+                "cad.boolean",
+                json!({"a": "block", "b": "tool", "op": "merge"})
+            )
+            .is_err()
+    );
+    assert!(
+        engine
+            .execute("cad.fillet", json!({"object": "block", "radius_mm": -1.0}))
+            .is_err()
+    );
+    assert!(
+        engine
+            .execute("cad.transform", json!({"object": "block", "ops": []}))
+            .is_err()
+    );
 }
