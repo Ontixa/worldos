@@ -25,6 +25,7 @@ dist-py/
 *.worldos-shm
 *.worldos-journal
 *.worldos.backup
+*.worldos.artifacts/
 examples/*/artifacts/
 
 # OS / editor
