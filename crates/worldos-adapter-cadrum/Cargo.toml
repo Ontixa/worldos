@@ -1,0 +1,10 @@
+[package]
+name = "worldos-adapter-cadrum"
+description = "WorldOS CadKernel adapter over cadrum (static OCCT 8.0.1)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+worldos-cad = { path = "../worldos-cad" }
+cadrum = "=0.8.20"

@@ -18,6 +18,8 @@ pub mod types {
     pub const PLANE: &str = "geom:plane";
     pub const CONE: &str = "geom:cone";
     pub const TORUS: &str = "geom:torus";
+    /// B-rep solid produced by the CAD kernel (worldos-cad).
+    pub const CAD_BODY: &str = "cad:body";
 
     /// True for builtin spatial primitive types.
     pub fn is_primitive(t: &str) -> bool {
@@ -36,6 +38,11 @@ pub mod components {
     pub const DECISION_INFO: &str = "core:decision-info";
     pub const AGENT_TASK_INFO: &str = "core:agent-task-info";
     pub const COST: &str = "core:cost";
+    /// Parametric regeneration recipe (worldos-cad::CadOperation).
+    pub const CAD_OPERATION: &str = "cad:operation";
+    /// Derived kernel output: artifact refs + measures + topology
+    /// (worldos-cad::CadShape).
+    pub const CAD_SHAPE: &str = "cad:shape";
 }
 
 pub mod rel {

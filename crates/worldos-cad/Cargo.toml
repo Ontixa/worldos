@@ -1,0 +1,12 @@
+[package]
+name = "worldos-cad"
+description = "WorldOS CAD domain: CadKernel trait, units, tolerances, cad:* component payloads"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+worldos-artifact = { path = "../worldos-artifact" }

@@ -5,6 +5,8 @@ members = [
     "crates/worldos-commands",
     "crates/worldos-store",
     "crates/worldos-artifact",
+    "crates/worldos-cad",
+    "crates/worldos-adapter-cadrum",
     "crates/worldos-capability",
     "crates/worldos-engine",
     "crates/worldos-agent",
