@@ -50,3 +50,9 @@ coverage/
 *.profraw
 test-results/
 .tmp-*/
+
+# AI assistant artifacts
+.devin/
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+NUL
