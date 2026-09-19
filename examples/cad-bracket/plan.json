@@ -1,0 +1,42 @@
+[
+  {
+    "type": "cad.create_box",
+    "input": {"size_mm": [60.0, 40.0, 8.0], "name": "plate-stock"}
+  },
+  {
+    "type": "cad.create_cylinder",
+    "input": {"radius_mm": 4.0, "height_mm": 16.0, "position": [15.0, 20.0, -4.0], "name": "hole1"}
+  },
+  {
+    "type": "cad.create_cylinder",
+    "input": {"radius_mm": 4.0, "height_mm": 16.0, "position": [45.0, 20.0, -4.0], "name": "hole2"}
+  },
+  {
+    "type": "cad.boolean",
+    "input": {"a": "plate-stock", "b": "hole1", "op": "subtract", "name": "plate_h1"}
+  },
+  {
+    "type": "cad.boolean",
+    "input": {"a": "plate_h1", "b": "hole2", "op": "subtract", "name": "plate"}
+  },
+  {
+    "type": "cad.fillet",
+    "input": {"object": "plate", "radius_mm": 1.0, "name": "plate_f"}
+  },
+  {
+    "type": "cad.create_box",
+    "input": {"size_mm": [6.0, 40.0, 16.0], "position": [27.0, 0.0, 8.0], "name": "rib"}
+  },
+  {
+    "type": "cad.boolean",
+    "input": {"a": "plate_f", "b": "rib", "op": "union", "name": "bracket"}
+  },
+  {
+    "type": "cad.set_param",
+    "input": {"object": "plate-stock", "params": {"size_mm": [60.0, 40.0, 10.0]}}
+  },
+  {
+    "type": "cad.regenerate",
+    "input": {"all_stale": true}
+  }
+]
