@@ -1,0 +1,86 @@
+id: cycle-rejection
+title: cad.set_param retarget that would close a dependency cycle is refused
+steps:
+  - name: two stocks
+    command: cad.create_box
+    input:
+      size_mm: [20.0, 20.0, 20.0]
+      name: blk_a
+    expect:
+      - {kind: ok}
+
+  - command: cad.create_box
+    input:
+      size_mm: [10.0, 10.0, 30.0]
+      name: blk_b
+    expect:
+      - {kind: ok}
+
+  - name: union -> joined (blk_b pokes out the top)
+    command: cad.boolean
+    input:
+      a: blk_a
+      b: blk_b
+      op: union
+      name: joined
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 9000, rel: 0.01}
+    save: joined
+
+  - name: derived transform depends on joined
+    command: cad.transform
+    input:
+      object: joined
+      ops:
+        - {kind: translate, delta_mm: [0.0, 0.0, 5.0]}
+      name: joined_t
+    expect:
+      - {kind: ok}
+      - {kind: eq, path: "output.topology.is_valid", value: true}
+    save: joined_t
+
+  - name: retarget joined.a to its own dependent -> cycle refused
+    command: cad.set_param
+    input:
+      object: joined
+      params:
+        a: "${joined_t.id}"
+    expect:
+      - {kind: error, contains: "cycle"}
+
+  - name: graph unchanged after rejection — union still measures
+    command: cad.measure
+    input:
+      object: joined
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 9000, rel: 0.01}
+      - {kind: query_object, name: joined_t, path: "cad:shape.stale", value: false}
+
+  - name: retarget to a real sibling is allowed and resyncs edges
+    command: cad.create_box
+    input:
+      size_mm: [15.0, 15.0, 15.0]
+      name: blk_c
+    expect:
+      - {kind: ok}
+    save: blk_c
+
+  - command: cad.set_param
+    input:
+      object: joined
+      params:
+        b: "${blk_c.id}"
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: joined, path: "cad:shape.stale", value: false}
+      - {kind: query_object, name: joined_t, path: "cad:shape.stale", value: true}
+
+  - name: regen the dependent — new recipe actually used blk_c
+    command: cad.regenerate
+    input:
+      object: joined_t
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: joined_t, path: "cad:shape.stale", value: false}

@@ -1,0 +1,66 @@
+id: stale-edge-selection
+title: Stale edge selection on regen fails loudly — no silent re-pick
+steps:
+  - name: stock
+    command: cad.create_box
+    input:
+      size_mm: [30.0, 30.0, 30.0]
+      name: stock
+    expect:
+      - {kind: ok}
+
+  - name: fillet ALL edges (empty selector = all)
+    command: cad.fillet
+    input:
+      object: stock
+      radius_mm: 2.0
+      name: stock_f
+    expect:
+      - {kind: ok}
+      - {kind: eq, path: "output.topology.is_valid", value: true}
+      - {kind: query_object, name: stock_f, path: "cad:operation.params.edge_ids", value: []}
+
+  - name: plant a dangling edge id in the recipe
+    command: engine.set_component_field
+    input:
+      object: stock_f
+      component: cad:operation
+      path: params.edge_ids
+      value: [4242424242]
+    expect:
+      - {kind: ok}
+
+  - name: force stale then regenerate -> selection error, not silent re-pick
+    command: cad.set_param
+    input:
+      object: stock
+      params:
+        size_mm: [32.0, 30.0, 30.0]
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: stock_f, path: "cad:shape.stale", value: true}
+
+  - command: cad.regenerate
+    input:
+      object: stock_f
+    expect:
+      - {kind: error, contains: "stale edge selection"}
+      - {kind: query_object, name: stock_f, path: "cad:shape.stale", value: true}
+
+  - name: clearing the selector restores all-edges -> regen succeeds
+    command: engine.set_component_field
+    input:
+      object: stock_f
+      component: cad:operation
+      path: params.edge_ids
+      value: []
+    expect:
+      - {kind: ok}
+
+  - command: cad.regenerate
+    input:
+      object: stock_f
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: stock_f, path: "cad:shape.stale", value: false}
+      - {kind: eq, path: "output.topology.is_valid", value: true}

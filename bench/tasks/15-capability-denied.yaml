@@ -1,0 +1,58 @@
+id: capability-denied
+title: Restricted actor is blocked on writes, unblocked on reads; reset restores
+steps:
+  - name: baseline object as the normal user
+    command: object.create
+    input:
+      type: core:note
+      name: baseline
+    expect:
+      - {kind: ok}
+
+  - name: switch to a read-only actor
+    command: engine.set_actor
+    input:
+      id: bench-readonly
+      permissions: ["project.read"]
+    expect:
+      - {kind: ok}
+
+  - name: object.create is denied
+    command: object.create
+    input:
+      type: core:note
+      name: forbidden
+    expect:
+      - {kind: error, contains: "permission denied"}
+      - {kind: query_absent, name: forbidden}
+
+  - name: cad.create_box is denied too
+    command: cad.create_box
+    input:
+      size_mm: [5.0, 5.0, 5.0]
+      name: forbidden_cad
+    expect:
+      - {kind: error, contains: "permission denied"}
+      - {kind: query_absent, name: forbidden_cad}
+
+  - name: even cad.measure needs project.write in this schema -> denied
+    command: cad.measure
+    input:
+      object: baseline
+    expect:
+      - {kind: error, contains: "permission denied"}
+      - {kind: query_object, name: baseline}
+
+  - name: restore the full actor
+    command: engine.reset_actor
+    expect:
+      - {kind: ok}
+
+  - name: writes work again
+    command: object.create
+    input:
+      type: core:note
+      name: allowed-again
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: allowed-again}

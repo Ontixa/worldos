@@ -1,0 +1,57 @@
+id: save-as-failure
+title: Save As onto an occupied path is refused; original stays usable; overwrite grant works
+steps:
+  - name: make a CAD body worth saving
+    command: cad.create_box
+    input:
+      size_mm: [20.0, 20.0, 20.0]
+      name: keepme
+    expect:
+      - {kind: ok}
+
+  - name: occupy the destination file
+    command: engine.touch
+    input:
+      file: occupied.worldos
+      content: foreign-data
+    expect:
+      - {kind: ok}
+
+  - name: save_as refuses to clobber a foreign file
+    command: engine.save_as
+    input:
+      file: occupied.worldos
+    expect:
+      - {kind: error, contains: "exists"}
+
+  - name: engine still works — original project intact, geometry measurable
+    command: cad.measure
+    input:
+      object: keepme
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 8000, rel: 0.001}
+
+  - name: explicit overwrite grant succeeds
+    command: engine.save_as
+    input:
+      file: occupied.worldos
+      overwrite: true
+    expect:
+      - {kind: ok}
+
+  - name: reopen the overwritten file — CAD artifact came along
+    command: engine.reopen
+    input:
+      file: occupied.worldos
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: keepme}
+
+  - name: measure after reopen — brep artifact migrated
+    command: cad.measure
+    input:
+      object: keepme
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 8000, rel: 0.001}

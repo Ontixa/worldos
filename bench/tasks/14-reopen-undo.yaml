@@ -1,0 +1,71 @@
+id: reopen-undo
+title: Reopen after several ops preserves history — undo works across reopen
+steps:
+  - name: build two bodies
+    command: cad.create_box
+    input:
+      size_mm: [20.0, 20.0, 20.0]
+      name: b1
+    expect:
+      - {kind: ok}
+
+  - command: cad.create_cylinder
+    input:
+      radius_mm: 3.0
+      height_mm: 30.0
+      position: [10.0, 10.0, -5.0]
+      name: pin
+    expect:
+      - {kind: ok}
+
+  - name: subtract
+    command: cad.boolean
+    input:
+      a: b1
+      b: pin
+      op: subtract
+      name: result
+    expect:
+      - {kind: ok}
+
+  - name: save and reopen — history must persist
+    command: engine.save
+    expect:
+      - {kind: ok}
+
+  - command: engine.reopen
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: result}
+
+  - name: undo across the reopen boundary -> result object removed
+    command: engine.undo
+    expect:
+      - {kind: ok}
+      - {kind: query_absent, name: result}
+      - {kind: query_object, name: pin}
+
+  - name: undo again -> pin removed
+    command: engine.undo
+    expect:
+      - {kind: ok}
+      - {kind: query_absent, name: pin}
+
+  - name: redo restores pin, then result
+    command: engine.redo
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: pin}
+
+  - command: engine.redo
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: result}
+
+  - name: redone body still measures through its brep artifact
+    command: cad.measure
+    input:
+      object: result
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 7434.5, rel: 0.001}

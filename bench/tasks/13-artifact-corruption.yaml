@@ -1,0 +1,66 @@
+id: artifact-corruption
+title: Corrupted / missing brep blob surfaces as a load error, never fake geometry
+steps:
+  - name: two bodies
+    command: cad.create_box
+    input:
+      size_mm: [10.0, 10.0, 10.0]
+      name: victim
+    expect:
+      - {kind: ok}
+    save: victim
+
+  - command: cad.create_box
+    input:
+      size_mm: [5.0, 5.0, 5.0]
+      name: survivor
+    expect:
+      - {kind: ok}
+    save: survivor
+
+  - name: persist project + sidecar
+    command: engine.save
+    expect:
+      - {kind: ok}
+
+  - name: corrupt victim's blob on disk
+    command: engine.corrupt_artifact
+    input:
+      sha: "${victim.brep}"
+    expect:
+      - {kind: ok}
+
+  - name: reopen loads the project file fine
+    command: engine.reopen
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: victim}
+      - {kind: query_object, name: survivor}
+
+  - name: measuring victim reports a load error — no fallback geometry
+    command: cad.measure
+    input:
+      object: victim
+    expect:
+      - {kind: error}
+
+  - name: survivor still measures correctly
+    command: cad.measure
+    input:
+      object: survivor
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 125, rel: 0.001}
+
+  - name: delete survivor's blob -> measure fails too
+    command: engine.delete_artifact
+    input:
+      sha: "${survivor.brep}"
+    expect:
+      - {kind: ok}
+
+  - command: cad.measure
+    input:
+      object: survivor
+    expect:
+      - {kind: error}

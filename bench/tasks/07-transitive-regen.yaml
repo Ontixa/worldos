@@ -1,0 +1,74 @@
+id: transitive-regen
+title: A -> B -> C chain — transitive staleness + topo-ordered cascade
+steps:
+  - name: base block 40x30x10
+    command: cad.create_box
+    input:
+      size_mm: [40.0, 30.0, 10.0]
+      name: base
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 12000, rel: 0.001}
+
+  - name: drill through
+    command: cad.create_cylinder
+    input:
+      radius_mm: 4.0
+      height_mm: 20.0
+      position: [20.0, 15.0, -5.0]
+      name: drill
+    expect:
+      - {kind: ok}
+
+  - name: base - drill -> plate
+    command: cad.boolean
+    input:
+      a: base
+      b: drill
+      op: subtract
+      name: plate
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 11497.3, rel: 0.001}
+
+  - name: chamfer plate -> plate_c (depth 2)
+    command: cad.chamfer
+    input:
+      object: plate
+      distance_mm: 1.0
+      name: plate_c
+    expect:
+      - {kind: ok}
+      - {kind: eq, path: "output.topology.is_valid", value: true}
+
+  - name: widen base -> BOTH dependents go stale
+    command: cad.set_param
+    input:
+      object: base
+      params:
+        size_mm: [80.0, 30.0, 10.0]
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: plate, path: "cad:shape.stale", value: true}
+      - {kind: query_object, name: plate_c, path: "cad:shape.stale", value: true}
+
+  - name: cascade regenerate — sources before dependents
+    command: cad.regenerate
+    input:
+      all_stale: true
+    expect:
+      - {kind: ok}
+      - {kind: eq, path: "output.count", value: 2}
+      - {kind: eq, path: "output.regenerated.0.name", value: plate}
+      - {kind: eq, path: "output.regenerated.1.name", value: plate_c}
+      - {kind: query_object, name: plate, path: "cad:shape.stale", value: false}
+      - {kind: query_object, name: plate_c, path: "cad:shape.stale", value: false}
+
+  - name: plate_c volume reflects the widened base
+    command: cad.measure
+    input:
+      object: plate_c
+    expect:
+      - {kind: ok}
+      # 80*30*10 - pi*16*10 - chamfer delta; measured 23235.45
+      - {kind: approx, path: "output.measures.volume_mm3", value: 23235.5, rel: 0.005}

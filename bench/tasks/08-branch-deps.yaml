@@ -1,0 +1,62 @@
+id: branch-deps
+title: Branched dependents — one source, two feature branches, all_stale regen
+steps:
+  - name: stock
+    command: cad.create_box
+    input:
+      size_mm: [30.0, 30.0, 30.0]
+      name: stock
+    expect:
+      - {kind: ok}
+
+  - name: branch 1 — fillet
+    command: cad.fillet
+    input:
+      object: stock
+      radius_mm: 2.0
+      name: stock_f
+    expect:
+      - {kind: ok}
+      - {kind: eq, path: "output.topology.is_valid", value: true}
+
+  - name: branch 2 — chamfer
+    command: cad.chamfer
+    input:
+      object: stock
+      distance_mm: 2.0
+      name: stock_c
+    expect:
+      - {kind: ok}
+      - {kind: eq, path: "output.topology.is_valid", value: true}
+
+  - name: shrink stock -> both branches stale
+    command: cad.set_param
+    input:
+      object: stock
+      params:
+        size_mm: [25.0, 25.0, 25.0]
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: stock_f, path: "cad:shape.stale", value: true}
+      - {kind: query_object, name: stock_c, path: "cad:shape.stale", value: true}
+
+  - name: cascade regenerates every stale branch
+    command: cad.regenerate
+    input:
+      all_stale: true
+    expect:
+      - {kind: ok}
+      - {kind: eq, path: "output.count", value: 2}
+      - {kind: query_object, name: stock_f, path: "cad:shape.stale", value: false}
+      - {kind: query_object, name: stock_c, path: "cad:shape.stale", value: false}
+
+  - name: single-object regen does NOT touch siblings
+    command: cad.set_param
+    input:
+      object: stock
+      params:
+        size_mm: [28.0, 28.0, 28.0]
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: stock_f, path: "cad:shape.stale", value: true}
+      - {kind: query_object, name: stock_c, path: "cad:shape.stale", value: true}

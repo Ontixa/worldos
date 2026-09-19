@@ -1,0 +1,92 @@
+id: undo-redo-derived
+title: Undo/redo across a derived-op chain keeps objects + stale flags coherent
+steps:
+  - name: base
+    command: cad.create_box
+    input:
+      size_mm: [40.0, 20.0, 10.0]
+      name: base
+    expect:
+      - {kind: ok}
+
+  - name: param edit to 50 (history entry)
+    command: cad.set_param
+    input:
+      object: base
+      params:
+        size_mm: [50.0, 20.0, 10.0]
+    expect:
+      - {kind: ok}
+
+  - name: derived chamfer (fresh at creation)
+    command: cad.chamfer
+    input:
+      object: base
+      distance_mm: 1.0
+      name: base_c
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: base_c, path: "cad:shape.stale", value: false}
+
+  - name: param edit to 60 -> base_c stale
+    command: cad.set_param
+    input:
+      object: base
+      params:
+        size_mm: [60.0, 20.0, 10.0]
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: base_c, path: "cad:shape.stale", value: true}
+
+  - command: cad.regenerate
+    input:
+      object: base_c
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: base_c, path: "cad:shape.stale", value: false}
+
+  - name: undo regen -> stale flag restored to true
+    command: engine.undo
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: base_c, path: "cad:shape.stale", value: true}
+
+  - name: undo set_param -> base 50 again; base_c fresh (as before that edit)
+    command: engine.undo
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: base, path: "cad:operation.params.size_mm.0", value: 50.0}
+      - {kind: query_object, name: base_c, path: "cad:shape.stale", value: false}
+
+  - name: undo chamfer creation -> object gone
+    command: engine.undo
+    expect:
+      - {kind: ok}
+      - {kind: query_absent, name: base_c}
+
+  - name: redo chamfer -> recreated fresh (base still 50)
+    command: engine.redo
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: base_c, path: "cad:shape.stale", value: false}
+
+  - name: redo set_param -> base 60, dependent stale
+    command: engine.redo
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: base, path: "cad:operation.params.size_mm.0", value: 60.0}
+      - {kind: query_object, name: base_c, path: "cad:shape.stale", value: true}
+
+  - name: redo regen -> fresh again
+    command: engine.redo
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: base_c, path: "cad:shape.stale", value: false}
+
+  - name: final measurement is the regen'd 60mm-base chamfer
+    command: cad.measure
+    input:
+      object: base_c
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 11600, rel: 0.03}

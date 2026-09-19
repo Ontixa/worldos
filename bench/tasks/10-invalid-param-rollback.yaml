@@ -1,0 +1,58 @@
+id: invalid-param-rollback
+title: Invalid parameter / mid-chain failure leaves last-good geometry intact
+steps:
+  - name: base
+    command: cad.create_box
+    input:
+      size_mm: [50.0, 50.0, 10.0]
+      name: base
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 25000, rel: 0.001}
+
+  - name: derived chamfer
+    command: cad.chamfer
+    input:
+      object: base
+      distance_mm: 1.5
+      name: base_c
+    expect:
+      - {kind: ok}
+
+  - name: negative dimension is rejected, geometry untouched
+    command: cad.set_param
+    input:
+      object: base
+      params:
+        size_mm: [-5.0, 50.0, 10.0]
+    expect:
+      - {kind: error}
+
+  - name: base still measures the last-good value
+    command: cad.measure
+    input:
+      object: base
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 25000, rel: 0.001}
+      - {kind: query_object, name: base, path: "cad:shape.stale", value: false}
+      - {kind: query_object, name: base_c, path: "cad:shape.stale", value: false}
+
+  - name: NaN is rejected too
+    command: cad.set_param
+    input:
+      object: base
+      params:
+        size_mm: [".nan", 50.0, 10.0]
+    expect:
+      - {kind: error}
+
+  - name: valid change marks dependent stale
+    command: cad.set_param
+    input:
+      object: base
+      params:
+        size_mm: [60.0, 50.0, 10.0]
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: base_c, path: "cad:shape.stale", value: true}

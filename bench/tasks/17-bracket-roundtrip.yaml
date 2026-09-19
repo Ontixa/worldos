@@ -1,0 +1,163 @@
+id: bracket-roundtrip
+title: Parametric bracket — full chain, regen, save_as, reopen, STEP round-trip
+# Sample workbench part: 60x40x8 plate, two r4 through holes,
+# r1 fillet on all edges, then a 6x40x16 rib unioned on top.
+# Dependency depth: stock -> plate_h1 -> plate -> plate_f -> bracket
+steps:
+  - name: plate stock 60x40x8
+    command: cad.create_box
+    input:
+      size_mm: [60.0, 40.0, 8.0]
+      name: plate-stock
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 19200, rel: 0.001}
+
+  - name: hole tool 1
+    command: cad.create_cylinder
+    input:
+      radius_mm: 4.0
+      height_mm: 16.0
+      position: [15.0, 20.0, -4.0]
+      name: hole1
+    expect:
+      - {kind: ok}
+
+  - name: hole tool 2
+    command: cad.create_cylinder
+    input:
+      radius_mm: 4.0
+      height_mm: 16.0
+      position: [45.0, 20.0, -4.0]
+      name: hole2
+    expect:
+      - {kind: ok}
+
+  - name: plate = stock - h1 - h2 (two booleans)
+    command: cad.boolean
+    input:
+      a: plate-stock
+      b: hole1
+      op: subtract
+      name: plate_h1
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 18797.9, rel: 0.001}
+
+  - command: cad.boolean
+    input:
+      a: plate_h1
+      b: hole2
+      op: subtract
+      name: plate
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 18395.8, rel: 0.001}
+
+  - name: fillet all plate edges r1 (level 3)
+    command: cad.fillet
+    input:
+      object: plate
+      radius_mm: 1.0
+      name: plate_f
+    expect:
+      - {kind: ok}
+      - {kind: eq, path: "output.topology.is_valid", value: true}
+
+  - name: rib on top of the plate
+    command: cad.create_box
+    input:
+      size_mm: [6.0, 40.0, 16.0]
+      position: [27.0, 0.0, 8.0]
+      name: rib
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 3840, rel: 0.001}
+
+  - name: bracket = plate_f + rib (level 4)
+    command: cad.boolean
+    input:
+      a: plate_f
+      b: rib
+      op: union
+      name: bracket
+    expect:
+      - {kind: ok}
+      - {kind: eq, path: "output.topology.is_valid", value: true}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 22000, rel: 0.03}
+
+  - name: parametric edit at the ROOT — thicker plate
+    command: cad.set_param
+    input:
+      object: plate-stock
+      params:
+        size_mm: [60.0, 40.0, 10.0]
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: plate_h1, path: "cad:shape.stale", value: true}
+      - {kind: query_object, name: plate, path: "cad:shape.stale", value: true}
+      - {kind: query_object, name: plate_f, path: "cad:shape.stale", value: true}
+      - {kind: query_object, name: bracket, path: "cad:shape.stale", value: true}
+
+  - name: single cascade regen fixes the whole chain, sources first
+    command: cad.regenerate
+    input:
+      all_stale: true
+    expect:
+      - {kind: ok}
+      - {kind: eq, path: "output.count", value: 4}
+      - {kind: eq, path: "output.regenerated.0.name", value: plate_h1}
+      - {kind: eq, path: "output.regenerated.1.name", value: plate}
+      - {kind: eq, path: "output.regenerated.2.name", value: plate_f}
+      - {kind: eq, path: "output.regenerated.3.name", value: bracket}
+      - {kind: query_object, name: bracket, path: "cad:shape.stale", value: false}
+
+  - name: thicker plate — rib at z=8 now overlaps 2mm into the plate
+    command: cad.measure
+    input:
+      object: bracket
+    expect:
+      - {kind: ok}
+      # plate 24000 - 2*pi*16*10 = 22994.7; minus fillet delta;
+      # rib overlap 6*40*2 = 480 -> roughly 26350
+      - {kind: approx, path: "output.measures.volume_mm3", value: 26300, rel: 0.02}
+
+  - name: save_as then reopen — artifacts migrate
+    command: engine.save_as
+    input:
+      file: bracket.worldos
+    expect:
+      - {kind: ok}
+
+  - command: engine.reopen
+    input:
+      file: bracket.worldos
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: bracket, path: "cad:shape.stale", value: false}
+
+  - name: measure after reopen — real brep, same order of magnitude
+    command: cad.measure
+    input:
+      object: bracket
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 26300, rel: 0.02}
+
+  - name: STEP export + reimport — measure within tolerance
+    command: cad.export_step
+    input:
+      object: bracket
+    expect:
+      - {kind: ok}
+      - {kind: present, path: "output.step"}
+    save: bracket_step
+
+  - command: cad.import_step
+    input:
+      step: "${bracket_step.step}"
+      name: bracket_import
+    expect:
+      - {kind: ok}
+      - {kind: eq, path: "output.topology.is_valid", value: true}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 26300, rel: 0.05}
