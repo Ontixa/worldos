@@ -46,7 +46,10 @@ impl CadServices {
     /// (content-addressed copies are idempotent). Does NOT switch the
     /// binding — pair with [`Self::set_store`] once the caller's commit
     /// point has passed.
-    pub fn migrate_to(&self, store: &ArtifactStore) -> Result<u64, worldos_artifact::ArtifactError> {
+    pub fn migrate_to(
+        &self,
+        store: &ArtifactStore,
+    ) -> Result<u64, worldos_artifact::ArtifactError> {
         let old = self.artifacts();
         let mut copied = 0u64;
         for r in old.list()? {
@@ -234,7 +237,11 @@ fn auto_name(ctx: &CommandContext, prefix: &str) -> String {
 /// Object ids a recipe reads geometry from.
 fn op_sources(op: &worldos_cad::CadOperation) -> Vec<worldos_kernel::ids::ObjectId> {
     let p = &op.params;
-    let id = |k: &str| p.get(k).and_then(|v| v.as_str()).and_then(|s| s.parse().ok());
+    let id = |k: &str| {
+        p.get(k)
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.parse().ok())
+    };
     match op.kind.as_str() {
         "boolean" => [id("a"), id("b")].into_iter().flatten().collect(),
         "fillet" | "chamfer" | "transform" => id("source").into_iter().collect(),
@@ -283,9 +290,7 @@ fn transitive_dependents(
         let mut next: BTreeSet<ObjectId> = BTreeSet::new();
         for id in &frontier {
             for r in project.relations_to(*id) {
-                if r.type_id == worldos_kernel::known::rel::DERIVED_FROM
-                    && seen.insert(r.from)
-                {
+                if r.type_id == worldos_kernel::known::rel::DERIVED_FROM && seen.insert(r.from) {
                     next.insert(r.from);
                     out.push(r.from);
                 }
@@ -320,7 +325,10 @@ fn ancestors(
 }
 
 /// Name a body for error messages.
-fn name_of(project: &worldos_kernel::project::Project, id: worldos_kernel::ids::ObjectId) -> String {
+fn name_of(
+    project: &worldos_kernel::project::Project,
+    id: worldos_kernel::ids::ObjectId,
+) -> String {
     project
         .get(id)
         .map(|o| o.name.clone())
@@ -412,7 +420,10 @@ fn recipe_of(
 
 /// Fail when any direct source of `id`'s recipe is itself stale — the
 /// input version no longer matches what the recipe was authored against.
-fn check_sources_fresh(ctx: &CommandContext, op: &worldos_cad::CadOperation) -> Result<(), CommandError> {
+fn check_sources_fresh(
+    ctx: &CommandContext,
+    op: &worldos_cad::CadOperation,
+) -> Result<(), CommandError> {
     let stale: Vec<String> = op_sources(op)
         .iter()
         .filter(|s| is_stale(ctx.project, **s))
@@ -1448,9 +1459,7 @@ impl CommandHandler for CadSetParam {
         let patch = input["params"]
             .as_object()
             .ok_or_else(|| CommandError::Failed("`params` must be an object".into()))?;
-        let retargeted = patch
-            .keys()
-            .any(|k| is_source_param_key(&op.kind, k));
+        let retargeted = patch.keys().any(|k| is_source_param_key(&op.kind, k));
         {
             let base = op
                 .params
@@ -1494,9 +1503,7 @@ fn sync_derived_edges(
         let obj = ctx
             .project
             .get(*s)
-            .ok_or_else(|| {
-                CommandError::Failed(format!("retarget source {s} does not exist"))
-            })?;
+            .ok_or_else(|| CommandError::Failed(format!("retarget source {s} does not exist")))?;
         if obj.type_id.0 != types::CAD_BODY {
             return Err(CommandError::Failed(format!(
                 "retarget source `{}` is a `{}`, not a cad:body",
@@ -1560,8 +1567,14 @@ impl CommandHandler for CadRegenerate {
         use std::collections::BTreeSet;
         use worldos_kernel::ids::ObjectId;
 
-        let all_stale = input.get("all_stale").and_then(|v| v.as_bool()).unwrap_or(false);
-        let cascade = input.get("cascade").and_then(|v| v.as_bool()).unwrap_or(false);
+        let all_stale = input
+            .get("all_stale")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let cascade = input
+            .get("cascade")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
         // Compute the deterministic topological scope to rebuild.
         let scope: BTreeSet<ObjectId> = if all_stale {
@@ -1574,9 +1587,9 @@ impl CommandHandler for CadRegenerate {
             let target = input
                 .get("object")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| CommandError::Failed(
-                    "missing `object` (or pass `all_stale: true`)".into(),
-                ))?;
+                .ok_or_else(|| {
+                    CommandError::Failed("missing `object` (or pass `all_stale: true`)".into())
+                })?;
             let lookup = if target.parse::<ObjectId>().is_ok() {
                 json!({"id": target})
             } else {

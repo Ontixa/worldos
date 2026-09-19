@@ -113,14 +113,15 @@ fn commit_rename(wip: &Path, target: &Path) -> Result<(), EngineError> {
     for s in wal_sidecars(target) {
         rm(&s)?;
     }
-    std::fs::rename(wip, target).or_else(|e| {
-        // Some platforms refuse rename over an existing file; the
-        // journal already says `committed`, so a crash between remove
-        // and rename is recovered by `reconcile`.
-        rm(target).map_err(|r| std::io::Error::new(e.kind(), r.to_string()))?;
-        std::fs::rename(wip, target)
-    })
-    .map_err(|e| EngineError::Other(format!("commit rename: {e}")))
+    std::fs::rename(wip, target)
+        .or_else(|e| {
+            // Some platforms refuse rename over an existing file; the
+            // journal already says `committed`, so a crash between remove
+            // and rename is recovered by `reconcile`.
+            rm(target).map_err(|r| std::io::Error::new(e.kind(), r.to_string()))?;
+            std::fs::rename(wip, target)
+        })
+        .map_err(|e| EngineError::Other(format!("commit rename: {e}")))
 }
 
 /// Recover an interrupted save for `target`. Safe to call anytime.
@@ -223,14 +224,9 @@ pub(crate) fn save_project(
     fail: &mut FailHook,
 ) -> Result<(), EngineError> {
     reconcile(target)?;
-    let same_file = e
-        .path
-        .as_ref()
-        .is_some_and(|cur| paths_equal(cur, target));
+    let same_file = e.path.as_ref().is_some_and(|cur| paths_equal(cur, target));
     if !same_file && !opts.overwrite && target.exists() {
-        return Err(EngineError::DestinationExists(
-            target.display().to_string(),
-        ));
+        return Err(EngineError::DestinationExists(target.display().to_string()));
     }
     let snap = e.snapshot();
     let wip = wip_path(target);
@@ -244,8 +240,11 @@ pub(crate) fn save_project(
                     .map_err(|e| EngineError::Other(e.to_string()))?;
                 cad.migrate_to(&s)
                     .map_err(|e| EngineError::Other(format!("artifact migration: {e}")))?;
-                let have: HashSet<ArtifactRef> =
-                    s.list().map_err(|e| EngineError::Other(e.to_string()))?.into_iter().collect();
+                let have: HashSet<ArtifactRef> = s
+                    .list()
+                    .map_err(|e| EngineError::Other(e.to_string()))?
+                    .into_iter()
+                    .collect();
                 // Live refs are mandatory — the committed file must be
                 // openable with every artifact the graph needs.
                 let missing: Vec<String> = project_artifact_refs(&snap)

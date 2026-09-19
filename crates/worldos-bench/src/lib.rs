@@ -333,15 +333,17 @@ fn run_meta(kernel_name: &str, tasks: &[(PathBuf, Task)]) -> (Value, Value) {
         "cpus": std::thread::available_parallelism().map(|n| n.get()).unwrap_or(0),
         "host": host,
     });
-    let inputs = json!(tasks
-        .iter()
-        .map(|(f, t)| json!({
-            "file": f.file_name().unwrap_or_default().to_string_lossy(),
-            "id": t.id,
-            "steps": t.steps.len(),
-            "skipped": t.skip.is_some(),
-        }))
-        .collect::<Vec<_>>());
+    let inputs = json!(
+        tasks
+            .iter()
+            .map(|(f, t)| json!({
+                "file": f.file_name().unwrap_or_default().to_string_lossy(),
+                "id": t.id,
+                "steps": t.steps.len(),
+                "skipped": t.skip.is_some(),
+            }))
+            .collect::<Vec<_>>()
+    );
     (meta, inputs)
 }
 
@@ -417,7 +419,12 @@ fn run_task(file: &Path, task: &Task) -> TaskRecord {
     let mut engine = match Engine::create(&task.id, &project_path) {
         Ok(e) => e,
         Err(e) => {
-            return empty_record(task, file, "setup_failed", Some(format!("engine create: {e}")));
+            return empty_record(
+                task,
+                file,
+                "setup_failed",
+                Some(format!("engine create: {e}")),
+            );
         }
     };
     if let Err(e) = engine.attach_cad(Arc::new(worldos_adapter_cadrum::CadrumKernel::new())) {
@@ -542,7 +549,11 @@ fn exec_step(
                 .and_then(|f| f.as_str())
                 .unwrap_or("moved.worldos");
             let p = project_path.parent().unwrap_or(project_path).join(name);
-            let res = if input.get("overwrite").and_then(|v| v.as_bool()).unwrap_or(false) {
+            let res = if input
+                .get("overwrite")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
                 engine.save_as_opts(&p, worldos_engine::SaveOptions { overwrite: true })
             } else {
                 engine.save_as(&p)
@@ -602,11 +613,7 @@ fn exec_step(
                         std::fs::write(&path, b"corrupted-by-bench")
                     };
                     match res {
-                        Ok(()) => Ok((
-                            true,
-                            json!({command: r.to_string()}),
-                            String::new(),
-                        )),
+                        Ok(()) => Ok((true, json!({command: r.to_string()}), String::new())),
                         Err(e) => Ok((false, Value::Null, e.to_string())),
                     }
                 }

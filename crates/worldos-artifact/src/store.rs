@@ -144,7 +144,11 @@ impl ArtifactStore {
     /// report — nothing is deleted. Callers MUST build `keep` from every
     /// reachable reference (current objects, relations, and full undoable
     /// history); see `worldos_engine::save::snapshot_artifact_refs`.
-    pub fn gc(&self, keep: &HashSet<ArtifactRef>, dry_run: bool) -> Result<GcReport, ArtifactError> {
+    pub fn gc(
+        &self,
+        keep: &HashSet<ArtifactRef>,
+        dry_run: bool,
+    ) -> Result<GcReport, ArtifactError> {
         let mut report = GcReport::default();
         for r in self.list()? {
             if keep.contains(&r) {

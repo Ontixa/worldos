@@ -54,16 +54,16 @@ fn save_as_refuses_foreign_destination_without_grant() {
     let p2 = dir.path().join("b.worldos");
 
     let mut a = cad_engine(dir.path(), "a");
-    a.execute(
-        "cad.create_box",
-        json!({"size_mm": 10.0, "name": "box"}),
-    )
-    .unwrap();
+    a.execute("cad.create_box", json!({"size_mm": 10.0, "name": "box"}))
+        .unwrap();
 
     // An unrelated project already occupies p2.
     let mut b = Engine::create("b", &p2).unwrap();
-    b.execute("object.create", json!({"type": "core:note", "name": "mine"}))
-        .unwrap();
+    b.execute(
+        "object.create",
+        json!({"type": "core:note", "name": "mine"}),
+    )
+    .unwrap();
     b.save().unwrap();
     drop(b);
 
@@ -124,19 +124,14 @@ fn failure_before_commit_never_touches_target_or_state() {
         SaveStage::Rebind,
     ] {
         let mut fired = false;
-        e
-            .save_as_staged(
-                &p2,
-                SaveOptions::default(),
-                &mut |s| {
-                    if s == stage && !fired {
-                        fired = true;
-                        return Err(EngineError::Other(format!("injected at {stage:?}")));
-                    }
-                    Ok(())
-                },
-            )
-            .unwrap_err();
+        e.save_as_staged(&p2, SaveOptions::default(), &mut |s| {
+            if s == stage && !fired {
+                fired = true;
+                return Err(EngineError::Other(format!("injected at {stage:?}")));
+            }
+            Ok(())
+        })
+        .unwrap_err();
         assert!(fired);
         match stage {
             // A caught error at Rename reneges on the commit: cleanup
@@ -202,8 +197,11 @@ fn interrupted_save_recovers_via_journal() {
     // pre-existing target untouched.
     let p3 = dir.path().join("pre.worldos");
     let mut keep = Engine::create("keep", &p3).unwrap();
-    keep.execute("object.create", json!({"type": "core:note", "name": "keep"}))
-        .unwrap();
+    keep.execute(
+        "object.create",
+        json!({"type": "core:note", "name": "keep"}),
+    )
+    .unwrap();
     keep.save().unwrap();
     drop(keep);
     {

@@ -85,7 +85,10 @@ fn transitive_staleness_marks_every_dependent() {
     )
     .unwrap();
     assert!(stale(&e, "plate"), "direct dependent not marked stale");
-    assert!(stale(&e, "plate_c"), "transitive dependent not marked stale");
+    assert!(
+        stale(&e, "plate_c"),
+        "transitive dependent not marked stale"
+    );
 }
 
 #[test]
@@ -136,7 +139,9 @@ fn cascade_regenerates_in_topological_order() {
     assert!(!stale(&e, "plate_c"));
 
     // all_stale is a no-op when nothing is stale.
-    let out = e.execute("cad.regenerate", json!({"all_stale": true})).unwrap();
+    let out = e
+        .execute("cad.regenerate", json!({"all_stale": true}))
+        .unwrap();
     assert_eq!(out.output["count"].as_u64().unwrap(), 0);
 }
 
@@ -182,12 +187,12 @@ fn branched_dependencies_regen_all_stale() {
     assert!(stale(&e, "f") && stale(&e, "c") && stale(&e, "assy"));
 
     // all_stale covers the whole diamond in one transaction.
-    let out = e.execute("cad.regenerate", json!({"all_stale": true})).unwrap();
+    let out = e
+        .execute("cad.regenerate", json!({"all_stale": true}))
+        .unwrap();
     assert_eq!(out.output["count"].as_u64().unwrap(), 3);
     assert!(!stale(&e, "f") && !stale(&e, "c") && !stale(&e, "assy"));
-    let assy = e
-        .execute("cad.measure", json!({"object": "assy"}))
-        .unwrap();
+    let assy = e.execute("cad.measure", json!({"object": "assy"})).unwrap();
     // 60×40×40 box filleted + pin union: volume > the unmodified box
     // filleted alone; exact check unnecessary — validity + freshness is.
     assert!(assy.output["topology"]["is_valid"].as_bool().unwrap());
@@ -221,7 +226,10 @@ fn mid_chain_failure_rolls_back_whole_cascade() {
     // Cascade: plate regens fine, plate_c fails → whole command rolls
     // back. No half-new, half-old chain may be left reporting fresh.
     let err = e
-        .execute("cad.regenerate", json!({"object": "plate", "cascade": true}))
+        .execute(
+            "cad.regenerate",
+            json!({"object": "plate", "cascade": true}),
+        )
         .unwrap_err()
         .to_string();
     assert!(err.contains("stale edge selection"), "unexpected: {err}");
@@ -409,7 +417,9 @@ fn reopen_preserves_chain_and_regens_transitively() {
     let mut e2 = Engine::open(&path).unwrap();
     e2.attach_cad(Arc::new(CadrumKernel::new())).unwrap();
     assert!(stale(&e2, "plate") && stale(&e2, "plate_c"));
-    let out = e2.execute("cad.regenerate", json!({"all_stale": true})).unwrap();
+    let out = e2
+        .execute("cad.regenerate", json!({"all_stale": true}))
+        .unwrap();
     assert_eq!(out.output["count"].as_u64().unwrap(), 2);
     assert!(!stale(&e2, "plate") && !stale(&e2, "plate_c"));
 }

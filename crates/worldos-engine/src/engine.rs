@@ -74,11 +74,11 @@ impl Engine {
         crate::save::reconcile(path)?;
         // A zero-byte stub (e.g. left by a failed open) holds no project —
         // only a file with real content is protected.
-        let has_content = std::fs::metadata(path).map(|m| m.len() > 0).unwrap_or(false);
+        let has_content = std::fs::metadata(path)
+            .map(|m| m.len() > 0)
+            .unwrap_or(false);
         if has_content {
-            return Err(EngineError::DestinationExists(
-                path.display().to_string(),
-            ));
+            return Err(EngineError::DestinationExists(path.display().to_string()));
         }
         let mut e = Self::new(name);
         e.path = Some(path.to_path_buf());

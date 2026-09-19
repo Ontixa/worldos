@@ -21,4 +21,6 @@ pub use tolerance::{
     ANGULAR_TOLERANCE_RAD, AREA_TOLERANCE_MM2, LINEAR_TOLERANCE_MM, RELATIVE_MEASURE_TOLERANCE,
     VOLUME_TOLERANCE_MM3, approx_mm, approx_relative,
 };
-pub use types::{BBox, BoolOp, EdgeInfo, Measures, MeshData, ShapeId, TessParams, Topology, TransformOp};
+pub use types::{
+    BBox, BoolOp, EdgeInfo, Measures, MeshData, ShapeId, TessParams, Topology, TransformOp,
+};
