@@ -2037,6 +2037,7 @@ dependencies = [
  "worldos-adapter-cadrum",
  "worldos-cad",
  "worldos-engine",
+ "worldos-kernel",
 ]
 
 [[package]]
@@ -2075,7 +2076,9 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "ulid",
+ "worldos-adapter-cadrum",
  "worldos-agent",
+ "worldos-cad",
  "worldos-capability",
  "worldos-commands",
  "worldos-engine",

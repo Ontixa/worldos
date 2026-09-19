@@ -17,6 +17,8 @@ worldos-store = { path = "../worldos-store" }
 worldos-agent = { path = "../worldos-agent", features = ["llm"] }
 worldos-rpc = { path = "../worldos-rpc" }
 worldos-capability = { path = "../worldos-capability" }
+worldos-adapter-cadrum = { path = "../worldos-adapter-cadrum" }
+worldos-cad = { path = "../worldos-cad" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

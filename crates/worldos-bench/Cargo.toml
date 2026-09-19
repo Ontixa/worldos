@@ -9,6 +9,7 @@ authors.workspace = true
 
 [dependencies]
 worldos-engine = { path = "../worldos-engine" }
+worldos-kernel = { path = "../worldos-kernel" }
 worldos-cad = { path = "../worldos-cad" }
 worldos-adapter-cadrum = { path = "../worldos-adapter-cadrum" }
 serde.workspace = true

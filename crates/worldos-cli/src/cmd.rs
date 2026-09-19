@@ -407,6 +407,12 @@ fn open(file: &Path) -> Result<Engine, Box<dyn std::error::Error>> {
 fn register_extras(e: &mut Engine) {
     e.register_capability(Arc::new(AgentRun));
     e.register_capability(Arc::new(worldos_capability::plugin::PluginRun));
+    // Real CAD kernel — cad.* commands exist on every surface. Without
+    // this, opening a project with cad:body objects leaves them
+    // unmeasurable through the CLI.
+    if let Err(err) = e.attach_cad(Arc::new(worldos_adapter_cadrum::CadrumKernel::new())) {
+        tracing::warn!("cad kernel unavailable: {err}");
+    }
 }
 
 fn resolve(e: &Engine, key: &str) -> Option<worldos_kernel::ObjectId> {
