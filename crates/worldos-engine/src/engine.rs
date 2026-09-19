@@ -91,16 +91,28 @@ impl Engine {
     /// Open an existing `.worldos` file. First reconciles any interrupted
     /// staged save targeting this path (`crate::save::reconcile`).
     pub fn open(path: impl AsRef<Path>) -> Result<Self, EngineError> {
-        crate::save::reconcile(path.as_ref())?;
-        let store = SqliteStore::open(&path)?;
+        let path = path.as_ref();
+        // Reconcile first: a committed-but-unrenamed staged save
+        // legitimately means `path` does not exist yet.
+        crate::save::reconcile(path)?;
+        // Refuse to *create* the file as a side effect of opening:
+        // SqliteStore::open would migrate a fresh SQLite db and leave a
+        // project-looking file behind for a path that was only probed.
+        if !path.exists() {
+            return Err(EngineError::Other(format!(
+                "project file not found: {}",
+                path.display()
+            )));
+        }
+        let store = SqliteStore::open(path)?;
         let snap = store.load()?;
         let mut e = Self::new(snap.project.name.clone());
         e.project = snap.project;
         e.history = snap.history;
-        e.path = Some(path.as_ref().to_path_buf());
+        e.path = Some(path.to_path_buf());
         e.dirty = false;
         e.emit(EngineEvent::ProjectLoaded {
-            path: path.as_ref().display().to_string(),
+            path: path.display().to_string(),
         });
         Ok(e)
     }
