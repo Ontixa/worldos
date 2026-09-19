@@ -64,7 +64,56 @@ impl CadrumKernel {
         }
     }
 
-    /// Resolve `ids` (empty = all) to the solid's edge objects.
+    /// Geometry-derived edge identity: FNV-1a over quantized endpoints,
+    /// arc-length midpoint and polyline length. Unlike the TShape
+    /// pointer ids OCCT assigns, this is stable across BRep
+    /// serialization and across regeneration while the edge's geometry
+    /// is unchanged — which is what makes persisted selections
+    /// meaningful (and their staleness detectable).
+    fn edge_info(e: &cadrum::Edge) -> worldos_cad::EdgeInfo {
+        let pts = e.approximation_segments(Self::tess(TessParams::default()));
+        let mut length = 0.0f64;
+        for w in pts.windows(2) {
+            length += (w[1] - w[0]).length();
+        }
+        // walk to the arclength midpoint
+        let half = length / 2.0;
+        let mut acc = 0.0;
+        let mut mid = pts.first().copied().unwrap_or(e.start_point());
+        for w in pts.windows(2) {
+            let seg = (w[1] - w[0]).length();
+            if acc + seg >= half && seg > 0.0 {
+                mid = w[0] + (w[1] - w[0]) * ((half - acc) / seg);
+                break;
+            }
+            acc += seg;
+            mid = w[1];
+        }
+        let (s, t) = (e.start_point(), e.end_point());
+        let mut h = 0xcbf29ce484222325u64; // FNV-1a
+        let q = |v: f64| (v * 1e6).round() as i64;
+        for v in s
+            .to_array()
+            .into_iter()
+            .chain(t.to_array())
+            .chain(mid.to_array())
+            .chain([length])
+        {
+            for b in q(v).to_le_bytes() {
+                h = (h ^ b as u64).wrapping_mul(0x100000001b3);
+            }
+        }
+        worldos_cad::EdgeInfo {
+            id: h.max(1), // 0 reserved as "no id"
+            length_mm: length,
+            start_mm: s.to_array(),
+            end_mm: t.to_array(),
+            mid_mm: mid.to_array(),
+        }
+    }
+
+    /// Resolve `ids` (empty = all) to the solid's edge objects. Ids are
+    /// the geometry-derived identities from [`Self::edge_info`].
     fn select_edges<'a>(solid: &'a Solid, ids: &[u64]) -> Vec<&'a cadrum::Edge> {
         if ids.is_empty() {
             solid.iter_edge().collect()
@@ -72,7 +121,7 @@ impl CadrumKernel {
             let want: HashSet<u64> = ids.iter().copied().collect();
             solid
                 .iter_edge()
-                .filter(|e| want.contains(&e.id()))
+                .filter(|e| want.contains(&Self::edge_info(e).id))
                 .collect()
         }
     }
@@ -198,7 +247,9 @@ impl CadKernel for CadrumKernel {
 
     fn topology(&self, s: ShapeId) -> Result<Topology, CadError> {
         self.with(s, |solid| {
-            let edge_ids: Vec<u64> = solid.iter_edge().map(|e| e.id()).collect();
+            let edges_detail: Vec<worldos_cad::EdgeInfo> =
+                solid.iter_edge().map(Self::edge_info).collect();
+            let edge_ids: Vec<u64> = edges_detail.iter().map(|e| e.id).collect();
             let face_ids: Vec<u64> = solid.iter_face().map(|f| f.id()).collect();
             // Operational validity: OCCT exposes no BRepCheck here; a
             // well-formed solid has positive volume and real topology.
@@ -211,6 +262,7 @@ impl CadKernel for CadrumKernel {
                 is_valid,
                 edge_ids,
                 face_ids,
+                edges_detail,
             }
         })
     }

@@ -39,6 +39,21 @@ pub struct Measures {
     pub center_mm: [f64; 3],
 }
 
+/// Geometric descriptor of one edge — the basis of position-based
+/// selection. `id` is a geometry-derived identity (hash of quantized
+/// endpoints, arc-length midpoint and length): stable across BRep
+/// round-trips and across regeneration *while the edge's geometry is
+/// unchanged*. If a rebuild moves or removes the edge the id changes —
+/// that is exactly what stale-selection detection needs.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EdgeInfo {
+    pub id: u64,
+    pub length_mm: f64,
+    pub start_mm: [f64; 3],
+    pub end_mm: [f64; 3],
+    pub mid_mm: [f64; 3],
+}
+
 /// Topology census + validity summary of a shape.
 ///
 /// `is_valid` is an operational definition, not a full BRepCheck
@@ -51,12 +66,14 @@ pub struct Topology {
     pub edges: u32,
     pub is_solid: bool,
     pub is_valid: bool,
-    /// Kernel topology ids of the shape's edges — usable as selectors
-    /// for fillet/chamfer within the same session. NOT stable across
-    /// regeneration; re-resolve after every rebuild.
+    /// Geometry-derived edge identities (see [`EdgeInfo::id`]) — usable
+    /// as fillet/chamfer selectors across sessions and regenerations.
     pub edge_ids: Vec<u64>,
-    /// Kernel topology ids of the shape's faces.
+    /// Kernel topology ids of the shape's faces (session-scoped).
     pub face_ids: Vec<u64>,
+    /// Per-edge geometric descriptors backing `edge_ids`.
+    #[serde(default)]
+    pub edges_detail: Vec<EdgeInfo>,
 }
 
 /// A single rigid-body / affine transform step, applied in order.
