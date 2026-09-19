@@ -11,16 +11,26 @@ use worldos_engine::{diff_projects, Engine};
 /// The open project. `None` until the user creates or opens a file.
 struct AppState(Mutex<Option<Engine>>);
 
+/// Layer the desktop's capabilities on a bare engine: agent + the real
+/// OCCT CAD kernel. A project opened without CAD would leave cad:body
+/// objects dead — attach so every surface speaks the same commands.
+fn attach_surface(e: &mut Engine) -> Result<(), String> {
+    e.register_capability(Arc::new(worldos_agent::AgentRun));
+    e.attach_cad(Arc::new(worldos_adapter_cadrum::CadrumKernel::new()))
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 fn make_engine(name: &str, path: &PathBuf) -> Result<Engine, String> {
     let mut e = Engine::create(name, path).map_err(|e| e.to_string())?;
-    e.register_capability(Arc::new(worldos_agent::AgentRun));
+    attach_surface(&mut e)?;
     e.save().map_err(|e| e.to_string())?;
     Ok(e)
 }
 
 fn load_engine(path: &PathBuf) -> Result<Engine, String> {
     let mut e = Engine::open(path).map_err(|e| e.to_string())?;
-    e.register_capability(Arc::new(worldos_agent::AgentRun));
+    attach_surface(&mut e)?;
     Ok(e)
 }
 
@@ -62,11 +72,20 @@ fn project_open(state: State<AppState>, path: String) -> Result<Value, String> {
 }
 
 #[tauri::command]
-fn project_save(state: State<AppState>, path: Option<String>) -> Result<Value, String> {
+fn project_save(
+    state: State<AppState>,
+    path: Option<String>,
+    overwrite: Option<bool>,
+) -> Result<Value, String> {
     let mut g = state.0.lock().map_err(|e| e.to_string())?;
     let e = g.as_mut().ok_or("no project open")?;
     match path {
-        Some(p) if !p.is_empty() => e.save_as(PathBuf::from(p)),
+        Some(p) if !p.is_empty() => e.save_as_opts(
+            PathBuf::from(p),
+            worldos_engine::SaveOptions {
+                overwrite: overwrite.unwrap_or(false),
+            },
+        ),
         _ => e.save(),
     }
     .map_err(|e| e.to_string())?;
@@ -124,6 +143,42 @@ fn object_relations(state: State<AppState>, id: String) -> Result<Value, String>
         })
         .collect();
     Ok(json!(rels))
+}
+
+/// Real BRep tessellation for the viewport: loads the body's stored
+/// BRep artifact into the kernel, tessellates, returns MeshData (mm).
+/// Read-only — goes through `CadServices`, not a command, so viewport
+/// refreshes never dirty history.
+#[tauri::command]
+fn cad_mesh(state: State<AppState>, id: String) -> Result<Value, String> {
+    let g = state.0.lock().map_err(|e| e.to_string())?;
+    let e = g.as_ref().ok_or("no project open")?;
+    let cad = e.cad().ok_or("cad kernel not attached")?;
+    let oid = id
+        .parse::<worldos_kernel::ObjectId>()
+        .map_err(|_| "bad id")?;
+    let obj = e.get_object(oid).ok_or("object not found")?;
+    let shape = obj
+        .component_data(worldos_kernel::known::components::CAD_SHAPE)
+        .ok_or("not a cad:body (no cad:shape)")?;
+    let brep = shape["brep"]
+        .as_str()
+        .ok_or("cad:shape has no brep ref")?
+        .parse::<worldos_artifact::ArtifactRef>()
+        .map_err(|e| format!("bad brep ref: {e}"))?;
+    let mesh = cad
+        .mesh_for_brep(&brep, worldos_cad::TessParams::default())
+        .map_err(|e| format!("tessellate: {e}"))?;
+    Ok(json!({
+        "id": oid.to_string(),
+        "brep": brep.to_string(),
+        "stale": shape["stale"].as_bool().unwrap_or(false),
+        "generator": shape["generator"].as_str(),
+        "units": "mm",
+        "mesh": serde_json::to_value(&mesh).map_err(|e| e.to_string())?,
+        "measures": shape["measures"].clone(),
+        "topology": shape["topology"].clone(),
+    }))
 }
 
 #[tauri::command]
@@ -280,6 +335,7 @@ pub fn run() {
             object_list,
             object_get,
             object_relations,
+            cad_mesh,
             graph,
             search,
             command_execute,

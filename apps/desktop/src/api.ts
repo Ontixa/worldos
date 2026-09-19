@@ -2,6 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AgentReport,
+  CadMesh,
   CommandSchema,
   GraphView,
   ProjectInfo,
@@ -14,8 +15,11 @@ export const api = {
   projectNew: (name: string, path: string) =>
     invoke<ProjectInfo>("project_new", { name, path }),
   projectOpen: (path: string) => invoke<ProjectInfo>("project_open", { path }),
-  projectSave: (path?: string) =>
-    invoke<ProjectInfo>("project_save", { path: path ?? null }),
+  projectSave: (path?: string, overwrite?: boolean) =>
+    invoke<ProjectInfo>("project_save", {
+      path: path ?? null,
+      overwrite: overwrite ?? null,
+    }),
   projectInfo: () => invoke<ProjectInfo | null>("project_info"),
 
   objectList: (typeId?: string) =>
@@ -28,6 +32,7 @@ export const api = {
       { id },
     ),
   graph: () => invoke<GraphView>("graph"),
+  cadMesh: (id: string) => invoke<CadMesh>("cad_mesh", { id }),
   search: (query: Record<string, unknown>) =>
     invoke<{ id: string; name: string; type: string }[]>("search", { query }),
 

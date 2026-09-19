@@ -111,3 +111,17 @@ textarea { font-family: ui-monospace, monospace; font-size: 12px; }
 }
 .welcome h1 { color: var(--warn); margin: 0; }
 .welcome label { display: flex; flex-direction: column; gap: 4px; width: 320px; font-size: 12px; color: var(--dim); }
+
+/* cad workbench */
+.cadpanel { border: 1px solid var(--border); border-radius: 8px; padding: 8px; margin: 8px 0; background: #0d1117; }
+.cadpanel h4 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--accent); }
+.cadpanel .prow { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+.cadpanel .prow label { width: 96px; font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
+.cadpanel .prow input { flex: 1; min-width: 0; }
+.cadpanel .vec { display: flex; gap: 4px; flex: 1; min-width: 0; }
+.cadpanel .vec input { width: 0; flex: 1; }
+.cadpanel .row { margin-top: 8px; flex-wrap: wrap; }
+.cadpanel .measures { margin-top: 8px; line-height: 1.5; }
+.badge { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 8px; margin-bottom: 6px; }
+.badge.stale { background: #d28a3f22; color: #d28a3f; border: 1px solid #d28a3f55; }
+.error { color: #f85149; white-space: pre-wrap; font-size: 11px; }

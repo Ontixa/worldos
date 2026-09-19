@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import type { WsObject } from "../types";
+import { api } from "../api";
+import type { CadMesh, WsObject } from "../types";
 
-/** Minimal software renderer for `geom:*` objects. Orbit: drag, zoom: wheel. */
+/**
+ * Software renderer. `cad:body` objects draw their REAL BRep
+ * tessellation (kernel mesh of the stored artifact, mm, Z-up→Y-up).
+ * `geom:*` objects draw the legacy primitive proxies.
+ * Orbit: drag, zoom: wheel.
+ */
 
 type V3 = [number, number, number];
 
@@ -34,6 +40,16 @@ function toPrim(o: WsObject): Prim | null {
   };
 }
 
+/** A loaded CAD mesh ready to draw. */
+interface Body {
+  id: string;
+  name: string;
+  mesh: CadMesh;
+}
+
+// CAD is Z-up mm; the camera treats +Y as up — remap (x,y,z)→(x,z,y).
+const zu = (p: number[]): V3 => [p[0], p[2] ?? 0, p[1]];
+
 export default function Viewport3D({
   objects,
   selectedId,
@@ -45,9 +61,47 @@ export default function Viewport3D({
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [cam, setCam] = useState({ yaw: -0.7, pitch: 0.55, dist: 14 });
+  const [bodies, setBodies] = useState<Map<string, Body>>(new Map());
+  const [meshErr, setMeshErr] = useState<string>("");
   const drag = useRef<{ x: number; y: number } | null>(null);
-  const prims = objects.map(toPrim).filter((p): p is Prim => p !== null);
   const hit = useRef<{ id: string; x: number; y: number; r: number }[]>([]);
+
+  const cadObjs = objects.filter((o) => o.type_id === "cad:body");
+  const prims = objects.map(toPrim).filter((p): p is Prim => p !== null);
+
+  // (Re)tessellate each cad:body whose brep revision changed — keyed on
+  // the artifact ref so stale-mesh reuse is impossible.
+  const want = cadObjs
+    .map((o) => {
+      const brep = o.components["cad:shape"]?.data?.brep ?? "";
+      const stale = !!o.components["cad:shape"]?.data?.stale;
+      return { id: o.id, name: o.name, brep, stale };
+    })
+    .filter((b) => b.brep);
+  const wantKey = want.map((b) => `${b.id}@${b.brep}`).join("|");
+
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      const next = new Map<string, Body>();
+      for (const b of want) {
+        try {
+          const m = await api.cadMesh(b.id);
+          next.set(b.id, { id: b.id, name: b.name, mesh: m });
+        } catch (e) {
+          if (live) setMeshErr(`mesh ${b.name}: ${String(e)}`);
+        }
+      }
+      if (live) {
+        setBodies(next);
+        setMeshErr("");
+      }
+    })();
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantKey]);
 
   useEffect(() => {
     const canvas = ref.current!;
@@ -79,20 +133,90 @@ export default function Viewport3D({
       return [w / 2 + x * s, h / 2 - y * s, z];
     };
 
-    // ground grid
+    // ground grid + axes
     ctx.strokeStyle = "#21262d";
     ctx.lineWidth = 1;
     for (let i = -6; i <= 6; i++) {
       line(ctx, proj([i, 0, -6]), proj([i, 0, 6]));
       line(ctx, proj([-6, 0, i]), proj([6, 0, i]));
     }
-    // axes
     ctx.strokeStyle = "#3d4459";
     line(ctx, proj([0, 0, 0]), proj([3, 0, 0]));
     line(ctx, proj([0, 0, 0]), proj([0, 3, 0]));
     line(ctx, proj([0, 0, 0]), proj([0, 0, 3]));
 
     hit.current = [];
+
+    // ---- real BRep meshes (painter-sorted triangles, lambert) ------
+    interface Tri {
+      p: [number, number, number][];
+      depth: number;
+      color: string;
+      id: string;
+    }
+    const tris: Tri[] = [];
+    const light: V3 = norm([0.4, 0.85, 0.55]); // view-space light
+    for (const b of bodies.values()) {
+      const { positions, normals, indices } = b.mesh.mesh;
+      const sel = b.id === selectedId;
+      const base = b.mesh.stale ? [0xd2, 0x8a, 0x3f] : [0x58, 0xa6, 0xff];
+      const verts = positions.map(zu).map(view);
+      const norms = normals.map(zu);
+      for (let i = 0; i + 2 < indices.length; i += 3) {
+        const [a, b2, c] = [indices[i], indices[i + 1], indices[i + 2]];
+        const depth = (verts[a][2] + verts[b2][2] + verts[c][2]) / 3;
+        if (depth <= 0.2) continue;
+        // face normal = mean of corner normals (already normalized)
+        const n = norm([
+          (norms[a][0] + norms[b2][0] + norms[c][0]) / 3,
+          (norms[a][1] + norms[b2][1] + norms[c][1]) / 3,
+          (norms[a][2] + norms[b2][2] + norms[c][2]) / 3,
+        ]);
+        const lam = 0.25 + 0.75 * Math.abs(n[0] * light[0] + n[1] * light[1] + n[2] * light[2]);
+        const col = sel
+          ? `rgb(255,211,61)`
+          : `rgb(${Math.round(base[0] * lam)},${Math.round(base[1] * lam)},${Math.round(base[2] * lam)})`;
+        tris.push({
+          p: [proj2(verts[a]), proj2(verts[b2]), proj2(verts[c])],
+          depth,
+          color: col,
+          id: b.id,
+        });
+      }
+      // label + hit region at the body's bbox center
+      const bb = b.mesh.measures?.bbox;
+      if (bb) {
+        const c = proj(zu([
+          (bb.min_mm[0] + bb.max_mm[0]) / 2,
+          (bb.min_mm[1] + bb.max_mm[1]) / 2,
+          (bb.min_mm[2] + bb.max_mm[2]) / 2,
+        ]));
+        const ext = Math.max(
+          ...bb.max_mm.map((v: number, i: number) => v - bb.min_mm[i]),
+        );
+        hit.current.push({ id: b.id, x: c[0], y: c[1], r: Math.max(ext * f / Math.max(c[2], 0.5) * 0.4, 10) });
+        ctx.fillStyle = sel ? "#ffd33d" : b.mesh.stale ? "#d28a3f" : "#8b949e";
+        ctx.font = "11px sans-serif";
+        ctx.fillText(`${b.name}${b.mesh.stale ? " ⟳stale" : ""}`, c[0] + 8, c[1]);
+      }
+    }
+    tris.sort((a, b) => b.depth - a.depth);
+    for (const t of tris) {
+      ctx.beginPath();
+      ctx.moveTo(t.p[0][0], t.p[0][1]);
+      ctx.lineTo(t.p[1][0], t.p[1][1]);
+      ctx.lineTo(t.p[2][0], t.p[2][1]);
+      ctx.closePath();
+      ctx.fillStyle = t.color;
+      ctx.fill();
+    }
+
+    function proj2(v: V3): [number, number, number] {
+      const s = f / Math.max(v[2], 0.5);
+      return [w / 2 + v[0] * s, h / 2 - v[1] * s, v[2]];
+    }
+
+    // ---- geom:* primitive proxies (unchanged) ----------------------
     const sorted = [...prims].sort((a, b) => view(b.pos)[2] - view(a.pos)[2]);
     for (const p of sorted) {
       const sel = p.id === selectedId;
@@ -109,7 +233,6 @@ export default function Viewport3D({
         ctx.strokeStyle = sel ? "#ffd33d" : "#30363d";
         ctx.stroke();
       } else if (p.kind === "cone") {
-        // pyramid wireframe: square base + apex
         const [rx, , h2] = [dims[0] / 2, dims[1] / 2, dims[2] / 2];
         const base: V3[] = [
           [-rx, -h2, -rx], [rx, -h2, -rx], [rx, -h2, rx], [-rx, -h2, rx],
@@ -122,7 +245,6 @@ export default function Viewport3D({
         poly(ctx, pb);
         for (const c of pb) line(ctx, c, apex);
       } else if (p.kind === "torus") {
-        // torus lies flat in xz: outer ellipse (proj of circle) + hole hint
         ctx.strokeStyle = sel ? "#ffd33d" : p.color;
         ctx.fillStyle = shade(p.color, sel);
         ctx.lineWidth = sel ? 2 : 1;
@@ -139,22 +261,21 @@ export default function Viewport3D({
           ctx.globalAlpha = 1;
           ctx.stroke();
         };
-        ring(dims[0] / 2);               // outer edge of ring
-        ring(dims[0] / 2 - dims[1] / 2); // inner edge (hole)
+        ring(dims[0] / 2);
+        ring(dims[0] / 2 - dims[1] / 2);
       } else {
-        // box-ish wireframe for cube/cylinder/plane
         const [sx2, sy2, sz2] = [dims[0] / 2, dims[1] / 2, dims[2] / 2];
-        const h = p.kind === "plane" ? 0.02 : sy2;
+        const hh = p.kind === "plane" ? 0.02 : sy2;
         const corners: V3[] = [
-          [-sx2, -h, -sz2], [sx2, -h, -sz2], [sx2, -h, sz2], [-sx2, -h, sz2],
-          [-sx2, h, -sz2], [sx2, h, -sz2], [sx2, h, sz2], [-sx2, h, sz2],
+          [-sx2, -hh, -sz2], [sx2, -hh, -sz2], [sx2, -hh, sz2], [-sx2, -hh, sz2],
+          [-sx2, hh, -sz2], [sx2, hh, -sz2], [sx2, hh, sz2], [-sx2, hh, sz2],
         ].map(([x, y, z]) => [x + p.pos[0], y + p.pos[1], z + p.pos[2]] as V3);
         const pc = corners.map(proj);
         ctx.fillStyle = shade(p.color, sel);
         ctx.strokeStyle = sel ? "#ffd33d" : p.color;
         ctx.lineWidth = sel ? 2 : 1;
-        poly(ctx, [pc[0], pc[1], pc[2], pc[3]]);   // bottom
-        poly(ctx, [pc[4], pc[5], pc[6], pc[7]]);   // top
+        poly(ctx, [pc[0], pc[1], pc[2], pc[3]]);
+        poly(ctx, [pc[4], pc[5], pc[6], pc[7]]);
         ctx.beginPath();
         for (const [a, b] of [[0, 4], [1, 5], [2, 6], [3, 7]]) {
           ctx.moveTo(pc[a][0], pc[a][1]);
@@ -162,16 +283,27 @@ export default function Viewport3D({
         }
         ctx.stroke();
       }
-      // label + hit region
       ctx.fillStyle = sel ? "#ffd33d" : "#8b949e";
       ctx.font = "11px sans-serif";
       ctx.fillText(p.name, cx + rad + 4, cy2);
       hit.current.push({ id: p.id, x: cx, y: cy2, r: Math.max(rad, 8) });
     }
-    if (prims.length === 0) {
+
+    if (prims.length === 0 && bodies.size === 0) {
       ctx.fillStyle = "#484f58";
       ctx.font = "13px sans-serif";
       ctx.fillText("No geometry yet — create one with ⌘ Command or the agent panel.", 20, 30);
+    }
+    if (bodies.size > 0) {
+      const trisN = tris.length;
+      ctx.fillStyle = "#484f58";
+      ctx.font = "10px sans-serif";
+      ctx.fillText(`${bodies.size} cad:body · ${trisN} tris · mm`, 8, h - 8);
+    }
+    if (meshErr) {
+      ctx.fillStyle = "#f85149";
+      ctx.font = "11px sans-serif";
+      ctx.fillText(meshErr, 20, 30);
     }
   });
 
@@ -200,6 +332,10 @@ export default function Viewport3D({
   );
 }
 
+function norm(v: V3): V3 {
+  const l = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / l, v[1] / l, v[2] / l];
+}
 function line(ctx: CanvasRenderingContext2D, a: number[], b: number[]) {
   ctx.beginPath();
   ctx.moveTo(a[0], a[1]);

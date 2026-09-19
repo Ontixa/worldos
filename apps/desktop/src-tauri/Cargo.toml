@@ -26,3 +26,6 @@ worldos-engine = { path = "../../../crates/worldos-engine" }
 worldos-agent = { path = "../../../crates/worldos-agent", features = ["llm"] }
 worldos-capability = { path = "../../../crates/worldos-capability" }
 worldos-kernel = { path = "../../../crates/worldos-kernel" }
+worldos-cad = { path = "../../../crates/worldos-cad" }
+worldos-artifact = { path = "../../../crates/worldos-artifact" }
+worldos-adapter-cadrum = { path = "../../../crates/worldos-adapter-cadrum" }

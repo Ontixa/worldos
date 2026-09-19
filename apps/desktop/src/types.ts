@@ -71,3 +71,30 @@ export interface GraphView {
   nodes: { id: string; name: string; type: string; components: string[] }[];
   edges: { id: string; type: string; from: string; to: string }[];
 }
+
+/** Real BRep tessellation of a cad:body, mm (worldos-cad MeshData). */
+export interface CadMesh {
+  id: string;
+  brep: string;
+  stale: boolean;
+  generator: string | null;
+  units: "mm";
+  mesh: {
+    positions: [number, number, number][];
+    normals: [number, number, number][];
+    indices: number[];
+    face_ids: number[];
+  };
+  measures: {
+    volume_mm3: number;
+    area_mm2: number;
+    bbox: { min_mm: [number, number, number]; max_mm: [number, number, number] };
+    center_mm: [number, number, number];
+  };
+  topology: {
+    solids: number; faces: number; edges: number;
+    is_solid: boolean; is_valid: boolean;
+    edge_ids: number[]; face_ids: number[];
+    edges_detail?: { id: number; length_mm: number; start_mm: number[]; end_mm: number[]; mid_mm: number[] }[];
+  };
+}
