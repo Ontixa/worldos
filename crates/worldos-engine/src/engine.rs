@@ -30,18 +30,18 @@ const EVENT_CAP: usize = 2048;
 type EventListener = Box<dyn Fn(&EngineEvent) + Send>;
 
 pub struct Engine {
-    project: Project,
-    registry: CommandRegistry,
-    capabilities: CapabilityRegistry,
-    validators: Vec<Box<dyn Validator>>,
-    history: History,
-    open_txn: Option<Transaction>,
-    actor: Actor,
-    events: VecDeque<EngineEvent>,
-    listeners: Vec<EventListener>,
-    path: Option<PathBuf>,
-    dirty: bool,
-    cad: Option<Arc<worldos_commands::builtin::CadServices>>,
+    pub(crate) project: Project,
+    pub(crate) registry: CommandRegistry,
+    pub(crate) capabilities: CapabilityRegistry,
+    pub(crate) validators: Vec<Box<dyn Validator>>,
+    pub(crate) history: History,
+    pub(crate) open_txn: Option<Transaction>,
+    pub(crate) actor: Actor,
+    pub(crate) events: VecDeque<EngineEvent>,
+    pub(crate) listeners: Vec<EventListener>,
+    pub(crate) path: Option<PathBuf>,
+    pub(crate) dirty: bool,
+    pub(crate) cad: Option<Arc<worldos_commands::builtin::CadServices>>,
 }
 
 impl Engine {
@@ -68,17 +68,30 @@ impl Engine {
     }
 
     /// Create a new project backed by a `.worldos` file (created on save).
+    /// Refuses to overwrite an existing file — open it, or pick another path.
     pub fn create(name: impl Into<String>, path: impl AsRef<Path>) -> Result<Self, EngineError> {
+        let path = path.as_ref();
+        crate::save::reconcile(path)?;
+        // A zero-byte stub (e.g. left by a failed open) holds no project —
+        // only a file with real content is protected.
+        let has_content = std::fs::metadata(path).map(|m| m.len() > 0).unwrap_or(false);
+        if has_content {
+            return Err(EngineError::DestinationExists(
+                path.display().to_string(),
+            ));
+        }
         let mut e = Self::new(name);
-        e.path = Some(path.as_ref().to_path_buf());
+        e.path = Some(path.to_path_buf());
         e.dirty = true;
         // Persist immediately so the file exists and the schema is live.
         e.save()?;
         Ok(e)
     }
 
-    /// Open an existing `.worldos` file.
+    /// Open an existing `.worldos` file. First reconciles any interrupted
+    /// staged save targeting this path (`crate::save::reconcile`).
     pub fn open(path: impl AsRef<Path>) -> Result<Self, EngineError> {
+        crate::save::reconcile(path.as_ref())?;
         let store = SqliteStore::open(&path)?;
         let snap = store.load()?;
         let mut e = Self::new(snap.project.name.clone());
@@ -92,29 +105,38 @@ impl Engine {
         Ok(e)
     }
 
-    /// Persist to the backing file (atomic SQLite transaction).
+    /// Persist to the backing file (journaled staged save — see
+    /// [`crate::save`]).
     pub fn save(&mut self) -> Result<(), EngineError> {
         let path = self.path.clone().ok_or(EngineError::NoBackingFile)?;
-        self.save_as(path)
+        self.save_as_opts(path, crate::save::SaveOptions::default())
     }
 
+    /// Save to `path`. Refuses to replace an existing file that is not
+    /// the currently bound path — pass [`crate::save::SaveOptions`] via
+    /// [`Self::save_as_opts`] to grant overwrite.
     pub fn save_as(&mut self, path: impl AsRef<Path>) -> Result<(), EngineError> {
-        let mut store = SqliteStore::open(&path)?;
-        store.save(&Snapshot::new(self.project.clone(), self.history.clone()))?;
-        self.path = Some(path.as_ref().to_path_buf());
-        self.dirty = false;
-        // Artifacts follow the project file: rebind the cad store to the
-        // new sidecar (migrating blobs) so reopening finds them.
-        if let Some(cad) = &self.cad {
-            let sidecar = worldos_artifact::ArtifactStore::for_project(path.as_ref())
-                .map_err(|e| EngineError::Other(e.to_string()))?;
-            cad.rebind(sidecar)
-                .map_err(|e| EngineError::Other(e.to_string()))?;
-        }
-        self.emit(EngineEvent::ProjectSaved {
-            path: path.as_ref().display().to_string(),
-        });
-        Ok(())
+        self.save_as_opts(path, crate::save::SaveOptions::default())
+    }
+
+    pub fn save_as_opts(
+        &mut self,
+        path: impl AsRef<Path>,
+        opts: crate::save::SaveOptions,
+    ) -> Result<(), EngineError> {
+        self.save_as_staged(path.as_ref(), opts, &mut |_| Ok(()))
+    }
+
+    /// Save with a failure-injection hook fired before each stage —
+    /// integration tests exercise every failure boundary for real.
+    #[doc(hidden)]
+    pub fn save_as_staged(
+        &mut self,
+        path: &Path,
+        opts: crate::save::SaveOptions,
+        hook: &mut dyn FnMut(crate::save::SaveStage) -> Result<(), EngineError>,
+    ) -> Result<(), EngineError> {
+        crate::save::save_project(self, path, opts, hook)
     }
 
     // ----- cad ------------------------------------------------------------
@@ -130,8 +152,13 @@ impl Engine {
     ) -> Result<Arc<worldos_commands::builtin::CadServices>, EngineError> {
         let store = match &self.path {
             Some(p) => worldos_artifact::ArtifactStore::for_project(p),
+            // Unsaved projects get a per-engine scratch store — never a
+            // global pool shared across projects/tenants.
             None => worldos_artifact::ArtifactStore::open(
-                std::env::temp_dir().join("worldos").join("artifacts"),
+                std::env::temp_dir()
+                    .join("worldos")
+                    .join("artifacts")
+                    .join(worldos_kernel::ids::ObjectId::new().to_string()),
             ),
         }
         .map_err(|e| EngineError::Other(e.to_string()))?;
@@ -156,6 +183,26 @@ impl Engine {
     /// CAD services when a kernel is attached.
     pub fn cad(&self) -> Option<Arc<worldos_commands::builtin::CadServices>> {
         self.cad.clone()
+    }
+
+    /// Garbage-collect the bound artifact store: blobs still referenced
+    /// by the snapshot — current components, relations, and the whole
+    /// undoable history — are kept; everything else is freed. With
+    /// `dry_run`, only reports. Returns `None` when no CAD services (and
+    /// therefore no artifact store) are attached.
+    pub fn gc_artifacts(
+        &self,
+        dry_run: bool,
+    ) -> Result<Option<worldos_artifact::GcReport>, EngineError> {
+        let Some(cad) = &self.cad else {
+            return Ok(None);
+        };
+        let keep = crate::save::snapshot_artifact_refs(&self.snapshot());
+        let store = cad.artifacts();
+        store
+            .gc(&keep, dry_run)
+            .map(Some)
+            .map_err(|e| EngineError::Other(e.to_string()))
     }
 
     // ----- introspection -------------------------------------------------
@@ -199,7 +246,7 @@ impl Engine {
     pub fn drain_events(&mut self) -> Vec<EngineEvent> {
         self.events.drain(..).collect()
     }
-    fn emit(&mut self, ev: EngineEvent) {
+    pub(crate) fn emit(&mut self, ev: EngineEvent) {
         for l in &self.listeners {
             l(&ev);
         }

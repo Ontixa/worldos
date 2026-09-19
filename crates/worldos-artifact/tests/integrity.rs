@@ -98,7 +98,12 @@ fn gc_collects_unreferenced_and_keeps_live() {
     let c = store.put(b"c").unwrap().artifact_ref;
 
     let keep: HashSet<_> = [a.clone(), c.clone()].into_iter().collect();
-    let report = store.gc(&keep).unwrap();
+    // dry run reports but deletes nothing
+    let dry = store.gc(&keep, true).unwrap();
+    assert_eq!(dry.removed, 1);
+    assert!(store.exists(&b));
+
+    let report = store.gc(&keep, false).unwrap();
     assert_eq!(report.kept, 2);
     assert_eq!(report.removed, 1);
     assert!(report.freed_bytes >= 1);
@@ -107,7 +112,7 @@ fn gc_collects_unreferenced_and_keeps_live() {
     assert!(store.exists(&c));
 
     // second gc is a no-op
-    let report2 = store.gc(&keep).unwrap();
+    let report2 = store.gc(&keep, false).unwrap();
     assert_eq!(report2.removed, 0);
     assert_eq!(report2.kept, 2);
 }

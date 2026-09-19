@@ -24,6 +24,8 @@ pub enum EngineError {
     TransactionOpen { action: &'static str },
     #[error("project has no backing file (use save_as)")]
     NoBackingFile,
+    #[error("destination already exists and overwrite was not granted: {0}")]
+    DestinationExists(String),
     #[error("{0}")]
     Other(String),
 }

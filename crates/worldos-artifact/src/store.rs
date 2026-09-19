@@ -140,8 +140,11 @@ impl ArtifactStore {
         Ok(out)
     }
 
-    /// Delete every blob not in `keep`. Returns what was freed.
-    pub fn gc(&self, keep: &HashSet<ArtifactRef>) -> Result<GcReport, ArtifactError> {
+    /// Delete every blob not in `keep`. With `dry_run`, only computes the
+    /// report — nothing is deleted. Callers MUST build `keep` from every
+    /// reachable reference (current objects, relations, and full undoable
+    /// history); see `worldos_engine::save::snapshot_artifact_refs`.
+    pub fn gc(&self, keep: &HashSet<ArtifactRef>, dry_run: bool) -> Result<GcReport, ArtifactError> {
         let mut report = GcReport::default();
         for r in self.list()? {
             if keep.contains(&r) {
@@ -149,7 +152,9 @@ impl ArtifactStore {
             } else {
                 let path = self.object_path(&r);
                 report.freed_bytes += fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-                fs::remove_file(&path)?;
+                if !dry_run {
+                    fs::remove_file(&path)?;
+                }
                 report.removed += 1;
             }
         }

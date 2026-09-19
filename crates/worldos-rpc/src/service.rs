@@ -80,7 +80,14 @@ impl RpcService {
             }
             "project.save" => {
                 match p("path").as_str() {
-                    Some(path) => engine.save_as(path).map_err(DispatchError::app)?,
+                    Some(path) => {
+                        let opts = worldos_engine::SaveOptions {
+                            overwrite: p("overwrite").as_bool().unwrap_or(false),
+                        };
+                        engine
+                            .save_as_opts(path, opts)
+                            .map_err(DispatchError::app)?
+                    }
                     None => engine.save().map_err(DispatchError::app)?,
                 }
                 Ok(json!({"ok": true}))

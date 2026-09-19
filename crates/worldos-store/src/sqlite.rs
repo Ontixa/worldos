@@ -71,6 +71,40 @@ impl SqliteStore {
         Ok(store)
     }
 
+    /// Open a staging file for an atomic save. Uses `journal_mode=DELETE`
+    /// so the staged database is a single self-contained file once the
+    /// write transaction commits — the caller renames it over the target.
+    pub fn open_staged(path: impl AsRef<Path>) -> Result<Self, StoreError> {
+        let path = path.as_ref().to_path_buf();
+        let conn = Connection::open(&path)?;
+        conn.pragma_update(None, "journal_mode", "DELETE")?;
+        conn.pragma_update(None, "synchronous", "FULL")?;
+        conn.pragma_update(None, "foreign_keys", "ON")?;
+        let mut store = Self { path, conn };
+        store.migrate()?;
+        Ok(store)
+    }
+
+    /// Read-only open for verification — never writes, never creates
+    /// journal/WAL sidecars, refuses files from a newer format.
+    pub fn open_readonly(path: impl AsRef<Path>) -> Result<Self, StoreError> {
+        use rusqlite::OpenFlags;
+        let path = path.as_ref().to_path_buf();
+        let conn = Connection::open_with_flags(
+            &path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+        let store = Self { path, conn };
+        let v = store.user_version()?;
+        if v as usize > MIGRATIONS.len() {
+            return Err(StoreError::UnsupportedVersion {
+                found: v,
+                supported: MIGRATIONS.len() as u32,
+            });
+        }
+        Ok(store)
+    }
+
     /// In-memory store (tests).
     pub fn in_memory() -> Result<Self, StoreError> {
         let conn = Connection::open_in_memory()?;
