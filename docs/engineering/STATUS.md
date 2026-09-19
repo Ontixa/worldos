@@ -2,7 +2,7 @@
 
 Only demonstrably working behavior is listed here. Verified on
 2026-09-19 (Windows 10, `x86_64-pc-windows-gnu`, cargo test
---workspace green; WorldBench corpus 6/6 pass).
+--workspace green; WorldBench corpus 17/17 pass on occt-8.0.1-cadrum).
 
 ## Working today
 
@@ -17,7 +17,12 @@ Only demonstrably working behavior is listed here. Verified on
 - **History** — attributed `TransactionRecord`s persisted per project.
 - **Persistence** — `.worldos` SQLite (WAL, `synchronous=FULL`), full
   snapshot + history in one file, `user_version` migrations (v1 only so
-  far). Atomic rewrite on save.
+  far). Saves are a journaled staged protocol (`save.rs`): artifact
+  migration → wip db write + fsync + read-back verify → commit-point
+  journal flip → rename; `Engine::open` reconciles interrupted saves.
+  `save_as` refuses an existing foreign destination unless
+  `SaveOptions{overwrite:true}` is granted; `Engine::open` never
+  creates a file as a side effect.
 - **Requirement staleness** — a write to a depended-on object flips
   dependent `core:requirement` status to `stale` in the same transaction.
 - **Requirement expressions** — `and`/`or`/`not`/parens grammar; measure
@@ -35,15 +40,21 @@ Only demonstrably working behavior is listed here. Verified on
 - **Agent runtime** — plan → act → verify inside one transaction;
   `RulePlanner`, `LlmPlanner` (feature `llm`, OpenAI-compatible BYOK),
   `FallbackPlanner`; per-run permission profiles.
-- **Interfaces** — CLI (`worldos`), JSON-RPC over stdio + WebSocket, MCP
-  server, TypeScript SDK, Python SDK (stdlib-only), Tauri 2 desktop
-  (builds; viewport renders analytic primitives).
+- **Interfaces** — CLI (`worldos`; attaches the real cadrum kernel on
+  open), JSON-RPC over stdio + WebSocket, MCP server, TypeScript SDK,
+  Python SDK (stdlib-only), Tauri 2 desktop (real kernel attached;
+  `cad_mesh` tessellates stored BReps; viewport renders OCCT meshes;
+  inspector exposes recipe params, stale flags, dependency edges and
+  regenerate).
 - **CI** — windows-latest: fmt + clippy + tests; TS+Python SDK build;
   desktop `cargo check`.
 - **Artifacts** — `worldos-artifact` content-addressed store
   (SHA-256, fan-out `objects/<hh>/<hex>`, atomic writes, verify-on-read,
-  gc); sidecar `<project>.artifacts/` follows `save_as`.
-- **Real CAD (Forge slice 1)** — `worldos-cad` `CadKernel` trait +
+  gc with `dry_run` + `freed_bytes`/`kept` counts); sidecar
+  `<project>.artifacts/` follows `save_as`. `Engine::gc_artifacts`
+  computes the keep set from live objects + relations + the full
+  undo/redo history.
+- **Real CAD** — `worldos-cad` `CadKernel` trait +
   `worldos-adapter-cadrum` (OCCT 8.0.1). Commands: `cad.create_{box,
   cylinder,sphere}`, `cad.boolean`, `cad.fillet`, `cad.chamfer`,
   `cad.transform`, `cad.measure`, `cad.export_{step,stl}`,
@@ -51,8 +62,26 @@ Only demonstrably working behavior is listed here. Verified on
   recipes are replayable; `core:derived-from` edges form the feature
   tree; `cad:shape.stale` flags dependents. `position` is baked into
   the BRep (world-space truth).
-- **WorldBench v0** — `worldos-bench` crate + `bench/tasks/*.yaml`
-  corpus (6 tasks) + `bench/reports/v0-baseline.json` (6/6 pass).
+- **Multi-level parametric regen** — `cad.set_param` propagates
+  staleness transitively; `cad.regenerate` supports single-object,
+  `cascade:true` and `all_stale:true` with deterministic topological
+  ordering (sources first), cycle detection, stale-upstream and
+  stale-edge-selection rejection, and atomic rollback of the whole
+  batch on mid-chain failure. Retargeting a recipe source
+  (`source`/`a`/`b`) resyncs `derived-from` edges and rejects cycles.
+  `Topology.edge_ids` are geometry-derived content hashes (endpoints +
+  mid + length) — stable across BRep round-trips, honestly stale when
+  topology changes.
+- **WorldBench v1** — `worldos-bench` crate + `bench/tasks/*.yaml`
+  corpus (17 tasks incl. transitive regen, cycle rejection, stale
+  edge selection, save-as failure, artifact corruption, reopen+undo,
+  capability denial, bracket round-trip) +
+  `bench/reports/worldbench-v1.json` (17/17 pass). Runner validates
+  tasks (non-empty id/steps, expect per step), distinguishes
+  passed/failed/skipped/setup_failed, and reports format_version 2
+  with commit/kernel/host metadata and per-step check evidence.
+- **CLI demo** — `examples/cad-bracket/` builds the same bracket via a
+  structured command plan in one transaction (`worldos batch`).
 
 ## Verified external dependency
 
@@ -60,15 +89,16 @@ Only demonstrably working behavior is listed here. Verified on
   verified 2026-09-18: cube/cylinder, boolean fuse/cut/intersect,
   fillet_edges, chamfer_edges, `read_step`/`write_step` round-trip
   (vol stable at 1e-4), `read_brep`/`write_brep` round-trip,
-  `Mesh::write_stl`, `Solid::mesh` tessellation, `iter_edge`/`iter_face`
-  with stable `id()`s. See `docs/adr/0006-cad-engine.md`.
+  `Mesh::write_stl`, `Solid::mesh` tessellation, `iter_edge`/`iter_face`.
+  Note: kernel `id()`s are per-session — `Topology` therefore derives
+  content-hash edge ids itself. See `docs/adr/0006-cad-engine.md`.
 
 ## Not yet working (see LIMITATIONS.md)
 
-- Semantic CAD topology selectors (`top_face`, `edges_adjacent_to`) —
-  `edge_ids`/`face_ids` in `cad:shape.topology` are raw kernel ids.
-- Deep regen: `cad.regenerate` replays one node using sources' current
-  BReps; no topological replay of a stale chain yet.
-- Property tests, fuzz targets, crash-injection tests.
+- Fuzzy topology re-selection — `edge_ids` are content hashes; a
+  changed topology is reported stale, never silently re-mapped.
+  Semantic selectors (`top_face`, `edges_adjacent_to`) still absent.
+- Property tests, fuzz targets (failure-injection coverage exists for
+  the save path; geometry ops not fuzzed).
 - Plugin sandboxing (native plugins are trusted local code).
 - Collaboration / multi-writer.

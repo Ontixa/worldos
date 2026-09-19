@@ -19,20 +19,32 @@ Brutally honest current-state constraints. Updated when reality changes.
 
 ## Persistence & recovery
 
-- **No crash-injection test suite yet.** Saves are atomic by
-  construction (single SQLite transaction + WAL), but restart-after-
-  kill recovery is not systematically proven.
+- **Save atomicity is journaled, not a single fs op.** The staged-save
+  protocol (journal → artifact migration → wip → commit point →
+  rename) recovers from interruption at every injected boundary, but
+  two resources (SQLite + sidecar) cannot be atomically committed as
+  one — a crash is recovered by `reconcile()` on next open, not
+  prevented.
 - **Migration coverage is thin.** Only schema v1 exists; no
   historical-version fixture matrix.
-- **No artifact store.** Large binary outputs (STEP, meshes) have no
-  canonical home yet.
+- **Artifact GC keeps history-reachable blobs.** Reachability walks
+  live objects + relations + the undo/redo history; anything else is
+  collectable. Disk-full / permission-denied mid-migration is handled
+  (reneged save, source intact) but quota policy is unimplemented.
 
 ## Geometry
 
-- **Analytic primitives only.** `geom:*` objects measure from component
-  parameters (cube = a×b×c). There is no B-rep, no real boolean, no
-  fillet, no STEP/STL I/O in the project graph yet. `geometry.measure`
-  numbers are approximations, not kernel-verified.
+- **Two geometry worlds.** `geom:*` analytic primitives (component-data
+  approximations) coexist with real `cad:body` B-reps — they do not
+  interoperate; `geometry.measure` numbers are approximations, not
+  kernel-verified.
+- **Edge selection is content-hash identity.** `edge_ids` hash each
+  edge's endpoints/midpoint/length — stable across BRep reloads, but
+  ANY topology change invalidates them (reported as stale selection,
+  never silently re-picked). No semantic selectors, no fuzzy matching.
+- **`cad.measure`/`cad.regenerate` are write-schema commands** — they
+  record history entries (undoable). Measuring is observationally
+  read-only but occupies a transaction slot.
 - **Rotation ignored by measure.** `object_dims` applies scale but not
   rotation — bbox/volume are correct for volume (rotation-invariant)
   but `object_bbox` is wrong for rotated objects.
@@ -53,10 +65,12 @@ Brutally honest current-state constraints. Updated when reality changes.
 - **Windows-only CI** (by design for now — `windows-latest`). Linux/
   macOS toolchains are untested; desktop is MinGW-checked only
   (cdylib workaround in `1087e28`).
-- **Desktop is a thin viewer** — no real CAD viewport, no diff view,
-  no transaction preview.
+- **Desktop viewport is a software rasterizer** — real OCCT
+  tessellation rendered painter-sorted on a 2D canvas; no GPU
+  pipeline, no picking, no diff view, no transaction preview.
 
 ## Testing
 
-- 36 tests cover the golden path. No property tests, no fuzzing, no
-  malformed-input campaigns, no migration matrix.
+- ~80 tests cover the golden path plus save-path failure injection and
+  CAD regen cascade/rollback. Still no property tests, fuzzing,
+  malformed-input campaigns, or migration matrix.
