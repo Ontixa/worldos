@@ -33,8 +33,16 @@ $script:failed = @()
 function Step {
     param([string]$Name, [scriptblock]$Run)
     Write-Host "`n== $Name ==" -ForegroundColor Cyan
-    & $Run
-    if ($LASTEXITCODE -ne 0) { $script:failed += $Name }
+    try {
+        # Local preference: command lookup/PowerShell errors must not reuse an
+        # earlier successful native exit code. Continue collecting other steps.
+        $ErrorActionPreference = "Stop"
+        & $Run
+        if ($LASTEXITCODE -ne 0) { $script:failed += $Name }
+    } catch {
+        Write-Host "FAILED: $Name - $($_.Exception.Message)" -ForegroundColor Red
+        $script:failed += $Name
+    }
 }
 
 try {
@@ -58,7 +66,8 @@ try {
             Step "ts sdk build" { npm run build -w @worldos/sdk }
             Step "ts sdk test" { npm run test -w @worldos/sdk }
         } else {
-            Write-Host "`n== ts sdk build == skipped (npm ci first)" -ForegroundColor DarkGray
+            Write-Host "`nMissing SDK dependencies: run npm ci from the repository root." -ForegroundColor Red
+            $script:failed += "SDK dependencies (npm ci required)"
         }
         $pyExe = $null
         foreach ($c in (Get-Command python -All -ErrorAction SilentlyContinue)) {
@@ -66,6 +75,9 @@ try {
         }
         if ($pyExe) {
             Step "python sdk compile" { & $pyExe -m py_compile sdks/worldos-py/worldos.py }
+        } else {
+            Write-Host "`nMissing real Python: install Python >= 3.10 and make it available on PATH (not a WindowsApps alias)." -ForegroundColor Red
+            $script:failed += "Python SDK prerequisite"
         }
     }
 

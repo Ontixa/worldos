@@ -37,6 +37,13 @@ python -m py_compile sdks/worldos-py/worldos.py
 
 (or just `pwsh scripts/check.ps1` and `pwsh scripts/test.ps1`)
 
+Selecting the SDK suite requires installed workspace dependencies and a real
+Python executable; missing prerequisites fail with setup guidance rather than
+reporting skipped work as passed. On Windows, run
+`node --test scripts/tests/selected-suites.test.mjs` for the dependency-free
+helper regression. It uses copied scripts and controlled command stubs, retains
+its temporary evidence, and invokes no real Cargo, npm, or Python commands.
+
 Desktop: `cd apps/desktop && npm run build && cd src-tauri && cargo check`
 
 ## The invariants
