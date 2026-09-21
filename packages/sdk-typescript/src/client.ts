@@ -75,7 +75,13 @@ export class WorldosClient {
         reject,
         timer,
       });
-      this.ws.send(frame);
+      try {
+        this.ws.send(frame);
+      } catch (error) {
+        clearTimeout(timer);
+        this.pending.delete(id);
+        reject(error);
+      }
     });
   }
 
@@ -86,6 +92,7 @@ export class WorldosClient {
     } catch {
       return;
     }
+    if (msg === null || typeof msg !== "object" || Array.isArray(msg)) return;
     if (msg.id == null) return;
     const p = this.pending.get(msg.id);
     if (!p) return;
