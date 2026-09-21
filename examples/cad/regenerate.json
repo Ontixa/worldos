@@ -1,0 +1,4 @@
+[
+  {"type":"cad.regenerate","input":{"object":"block"}},
+  {"type":"cad.measure","input":{"object":"block"}}
+]

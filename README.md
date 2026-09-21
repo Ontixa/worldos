@@ -21,8 +21,9 @@ Intent → Requirements → Universal Project Graph
 - **Governed mutations** — all changes are commands: schema-validated,
   permission-checked, grouped into atomic transactions, journaled into
   an append-only history, and undoable/redoable.
-- **`.worldos` files** — a single SQLite database per project: objects,
-  relations, and full history in one portable file.
+- **`.worldos` files** — a SQLite database per project: objects,
+  relations, and full history. Native CAD outputs additionally use a sibling
+  `.worldos.artifacts` directory; keep both together.
 - **Agent runtime** — a planner executes real commands through the
   capability layer (never raw mutation), inside one transaction,
   attributed to its own actor. Reported object/relation references are
@@ -35,6 +36,11 @@ Intent → Requirements → Universal Project Graph
   agent panel) all drive the same `Engine`.
 
 ## Quickstart
+
+Native B-rep CAD is a separate opt-in CLI build and session flag; the default
+CLI keeps the native OCCT dependency disabled. See the [CAD CLI workflow](docs/cad-cli.md)
+for `--features cad`, `--cad`, artifact handling and limitations. This does not
+enable CAD in the desktop app.
 
 ```bash
 cargo build -p worldos-cli          # produces the `worldos` binary

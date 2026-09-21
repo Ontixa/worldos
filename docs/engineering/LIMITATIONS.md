@@ -24,15 +24,18 @@ Brutally honest current-state constraints. Updated when reality changes.
   kill recovery is not systematically proven.
 - **Migration coverage is thin.** Only schema v1 exists; no
   historical-version fixture matrix.
-- **No artifact store.** Large binary outputs (STEP, meshes) have no
-  canonical home yet.
+- **CAD artifacts require a sidecar.** BRep/STEP/STL outputs are stored in
+  `<project>.artifacts/`; copying only the SQLite file is insufficient.
+  Undo restores graph references, not deletion of artifact blobs or arbitrary
+  filesystem effects. See [CAD CLI workflow](../cad-cli.md).
 
 ## Geometry
 
-- **Analytic primitives only.** `geom:*` objects measure from component
-  parameters (cube = a×b×c). There is no B-rep, no real boolean, no
-  fillet, no STEP/STL I/O in the project graph yet. `geometry.measure`
-  numbers are approximations, not kernel-verified.
+- **Analytic and native geometry are distinct.** `geom:*` objects still
+  measure from component parameters; `geometry.measure` is not kernel-verified.
+  Native `cad:*` bodies use the optional cadrum/OCCT adapter. The CLI requires
+  both a `cad` feature build and explicit `--cad` attachment; the desktop does
+  not attach this backend. Native CAD is not a universal modeling guarantee.
 - **Rotation ignored by measure.** `object_dims` applies scale but not
   rotation — bbox/volume are correct for volume (rotation-invariant)
   but `object_bbox` is wrong for rotated objects.

@@ -9,7 +9,12 @@ license.workspace = true
 name = "worldos"
 path = "src/main.rs"
 
+[features]
+default = []
+cad = ["dep:worldos-adapter-cadrum"]
+
 [dependencies]
+worldos-adapter-cadrum = { path = "../worldos-adapter-cadrum", optional = true }
 worldos-kernel = { path = "../worldos-kernel" }
 worldos-commands = { path = "../worldos-commands" }
 worldos-engine = { path = "../worldos-engine" }

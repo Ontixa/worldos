@@ -19,6 +19,9 @@ struct Cli {
     /// Emit machine-readable JSON.
     #[arg(long, global = true)]
     json: bool,
+    /// Attach the native CAD kernel (requires a build with --features cad).
+    #[arg(long, global = true)]
+    cad: bool,
     #[command(subcommand)]
     cmd: Cmd,
 }
@@ -143,7 +146,7 @@ enum PluginCmd {
 fn main() {
     let cli = Cli::parse();
     init_tracing();
-    let code = match cmd::run(cli.cmd, cli.json) {
+    let code = match cmd::run(cli.cmd, cli.json, cli.cad) {
         Ok(()) => 0,
         Err(e) => {
             if cli.json {

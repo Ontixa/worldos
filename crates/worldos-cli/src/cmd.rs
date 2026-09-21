@@ -8,12 +8,17 @@ use worldos_agent::AgentRun;
 use worldos_engine::{Engine, diff_projects};
 use worldos_rpc::RpcService;
 
-pub fn run(cmd: Cmd, json_out: bool) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(cmd: Cmd, json_out: bool, cad: bool) -> Result<(), Box<dyn std::error::Error>> {
+    // Reject unsupported opt-in before any project or artifact-store writes.
+    if cad && !cfg!(feature = "cad") {
+        return Err("CAD support is not compiled in; build with cargo build --locked -p worldos-cli --features cad".into());
+    }
+    let open = |file: &Path| open_with_options(file, cad);
     match cmd {
         Cmd::New { name, path } => {
             let path = path.unwrap_or_else(|| Path::new(&format!("{name}.worldos")).to_path_buf());
             let mut e = Engine::create(&name, &path)?;
-            register_extras(&mut e);
+            register_extras(&mut e, cad)?;
             e.save()?;
             print(
                 json_out,
@@ -397,16 +402,23 @@ pub fn run(cmd: Cmd, json_out: bool) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn open(file: &Path) -> Result<Engine, Box<dyn std::error::Error>> {
+fn open_with_options(file: &Path, cad: bool) -> Result<Engine, Box<dyn std::error::Error>> {
     let mut e = Engine::open(file)?;
-    register_extras(&mut e);
+    register_extras(&mut e, cad)?;
     Ok(e)
 }
 
 /// Capabilities layered on the engine by this interface.
-fn register_extras(e: &mut Engine) {
+fn register_extras(e: &mut Engine, cad: bool) -> Result<(), Box<dyn std::error::Error>> {
     e.register_capability(Arc::new(AgentRun));
     e.register_capability(Arc::new(worldos_capability::plugin::PluginRun));
+    if cad {
+        #[cfg(feature = "cad")]
+        e.attach_cad(Arc::new(worldos_adapter_cadrum::CadrumKernel::new()))?;
+        #[cfg(not(feature = "cad"))]
+        return Err("CAD support is not compiled in".into());
+    }
+    Ok(())
 }
 
 fn resolve(e: &Engine, key: &str) -> Option<worldos_kernel::ObjectId> {
