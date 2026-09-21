@@ -43,6 +43,54 @@ or a filesystem path in `file` (requiring the actor's `filesystem.read`
 permission). Use `worldos --cad commands <project> --json` for the exact current
 schemas. General `worldos export` remains a project-JSON export, not STEP export.
 
+### Copy the STEP artifact to a file
+
+Copy the `step` reference from the export result (the final result in the box
+batch), then replace `sha256:...` below with that actual reference:
+
+```sh
+target/debug/worldos --json artifact export cad-demo.worldos sha256:... block.step
+```
+
+This command also works in the default CLI build, without `--cad` or a native
+kernel. It returns `reference` (normalized to `sha256:<hex>`), `path`, `bytes`
+and `verified: true` only after hash verification, writing and file sync succeed.
+Both a lowercase 64-hex digest and its `sha256:` form are accepted. The fixed
+maximum artifact size is 64 MiB; there is no unlimited override. Existing output
+files, directories and final-component symlinks are never overwritten. Parent
+directories must already exist. Missing or corrupt artifacts do not create the
+destination or initialize a sidecar.
+
+The resulting `block.step` can be opened in another STEP-capable application.
+To reimport it through WorldOS, save this as a JSON batch and run it with
+`worldos --cad --json batch cad-demo.worldos <script-path>`:
+
+```json
+[
+  {"type":"cad.import_step","input":{"file":"block.step","name":"roundtrip"}},
+  {"type":"cad.measure","input":{"object":"roundtrip"}}
+]
+```
+
+The roundtrip volume should remain approximately 40,000 mm³. Paths are relative
+to the current working directory, not the project directory.
+
+Artifact copying is a trusted local-operator operation exposed by a shared
+`Engine::export_project_artifact` API, not an agent/RPC command. The API requires
+a caller-asserted human actor with `artifact.export` and `filesystem.write`;
+this is not authenticated human identity or an isolation boundary. Default
+agent permissions are unchanged. Parent paths are trusted; no filesystem sandbox
+or concurrent-path-replacement protection is promised.
+
+Only an existing regular project path and its associated sidecar are required.
+The copy does not open, validate or migrate the database, check graph membership
+of the artifact, modify project history, or attach CAD. It is not a graph-level
+authorization mechanism. External output files are outside undo. On write or sync
+failure the error names the newly created output, which is retained and may be
+partial (or fully written but with uncertain durability). Inspect/remove that
+file manually before retrying. Process crashes can likewise leave output behind;
+atomic publication and crash rollback are not claimed.
+
 ## Persistence and authority
 
 Keep `cad-demo.worldos` and `cad-demo.worldos.artifacts/` together when copying

@@ -93,6 +93,11 @@ enum Cmd {
     },
     /// Export the project model to JSON.
     Export { file: PathBuf, out: PathBuf },
+    /// Copy a verified artifact to a new file (trusted local operator; no CAD needed).
+    Artifact {
+        #[command(subcommand)]
+        sub: ArtifactCmd,
+    },
     /// Start the MCP server (stdio) bound to a project.
     Mcp { file: PathBuf },
     /// Raw JSON-RPC stdio endpoint bound to a project (used by SDKs).
@@ -121,6 +126,16 @@ enum Cmd {
     },
     /// Print version.
     Version,
+}
+
+#[derive(Subcommand)]
+enum ArtifactCmd {
+    /// Export an existing sidecar blob without overwriting any destination.
+    Export {
+        file: PathBuf,
+        reference: String,
+        out: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]

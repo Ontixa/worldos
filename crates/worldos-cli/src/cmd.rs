@@ -1,6 +1,6 @@
 //! Subcommand implementations — all through `Engine`.
 
-use crate::{Cmd, PluginCmd, out};
+use crate::{ArtifactCmd, Cmd, PluginCmd, out};
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -15,6 +15,27 @@ pub fn run(cmd: Cmd, json_out: bool, cad: bool) -> Result<(), Box<dyn std::error
     }
     let open = |file: &Path| open_with_options(file, cad);
     match cmd {
+        Cmd::Artifact {
+            sub:
+                ArtifactCmd::Export {
+                    file,
+                    reference,
+                    out: destination,
+                },
+        } => {
+            let report = Engine::export_project_artifact(
+                &file,
+                &worldos_kernel::actor::Actor::human("local-user"),
+                &reference,
+                &destination,
+            )?;
+            print(json_out, &serde_json::to_value(report)?, |v| {
+                println!(
+                    "exported verified artifact → {} ({} bytes)",
+                    v["path"], v["bytes"]
+                );
+            });
+        }
         Cmd::New { name, path } => {
             let path = path.unwrap_or_else(|| Path::new(&format!("{name}.worldos")).to_path_buf());
             let mut e = Engine::create(&name, &path)?;

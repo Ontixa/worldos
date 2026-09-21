@@ -111,10 +111,26 @@ mod native {
         let exported = command(file, "cad.export_step", json!({"object":"block"}), true);
         let step = exported["output"]["step"].as_str().unwrap();
         assert!(String::from_utf8_lossy(&artifact(file, step)).contains("ISO-10303-21"));
+        let step_file = dir.path().join("block.step");
+        let project_before_copy = std::fs::read(file).unwrap();
+        let copied = invoke(
+            &[
+                "artifact",
+                "export",
+                file,
+                step,
+                step_file.to_str().unwrap(),
+            ],
+            true,
+        );
+        assert_eq!(copied["verified"], true);
+        assert_eq!(copied["reference"], step);
+        assert_eq!(std::fs::read(file).unwrap(), project_before_copy);
+        assert_eq!(std::fs::read(&step_file).unwrap(), artifact(file, step));
         let imported = command(
             file,
             "cad.import_step",
-            json!({"step":step,"name":"roundtrip"}),
+            json!({"file":step_file,"name":"roundtrip"}),
             true,
         );
         volume(&imported["output"]);

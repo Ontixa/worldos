@@ -42,6 +42,10 @@ CLI keeps the native OCCT dependency disabled. See the [CAD CLI workflow](docs/c
 for `--features cad`, `--cad`, artifact handling and limitations. This does not
 enable CAD in the desktop app.
 
+After generating a STEP artifact, use `worldos artifact export <project> <reference> <new-file.step>`
+to copy verified bytes into a file for another CAD tool, without loading the CAD kernel.
+See the [copy limits and trusted-operator contract](docs/cad-cli.md#copy-the-step-artifact-to-a-file).
+
 ```bash
 cargo build -p worldos-cli          # produces the `worldos` binary
 
