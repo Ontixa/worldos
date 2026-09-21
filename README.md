@@ -25,7 +25,10 @@ Intent → Requirements → Universal Project Graph
   relations, and full history in one portable file.
 - **Agent runtime** — a planner executes real commands through the
   capability layer (never raw mutation), inside one transaction,
-  attributed to its own actor, then verifies its work.
+  attributed to its own actor. Reported object/relation references are
+  checked before commit; invalid or missing references fail the run and
+  trigger rollback. This presence check does not prove semantic goal
+  completion (see `docs/engineering/LIMITATIONS.md`).
 - **Interfaces, one engine** — CLI, JSON-RPC (stdio + WebSocket), MCP
   server for AI tools, TypeScript/Python SDKs, and a Tauri desktop
   workspace (graph, inspector, history, 3D viewport, command palette,

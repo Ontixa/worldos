@@ -6,7 +6,7 @@
 
 #[cfg(feature = "llm")]
 use crate::planner::FallbackPlanner;
-use crate::planner::{PlanError, PlannedStep, Planner, RulePlanner};
+use crate::planner::{PlanError, Planner, RulePlanner};
 use crate::report::{AgentReport, RunStatus, StepRecord};
 use serde_json::Value;
 use worldos_capability::CapabilityHost;
@@ -169,7 +169,9 @@ impl AgentRuntime {
             let input = resolve_refs(&step.input, &outputs);
             match host.run_command_as(&agent, &step.command, input.clone()) {
                 Ok(out) => {
-                    if let Some(id) = out.get("id").and_then(|v| v.as_str()) {
+                    if step.command != "relation.add"
+                        && let Some(id) = out.get("id").and_then(|v| v.as_str())
+                    {
                         created.insert(id.to_string());
                     }
                     records.push(StepRecord {
@@ -207,6 +209,21 @@ impl AgentRuntime {
             return rep;
         }
 
+        // Check reported references while the transaction can still roll back.
+        // This proves presence, not that the user's semantic goal was achieved.
+        let verification = match verify(host, &records) {
+            Ok(verification) => verification,
+            Err(error) => {
+                let mut message = format!("verification failed: {error}");
+                if let Err(error) = host.rollback_transaction() {
+                    message.push_str(&format!("; rollback failed: {error}"));
+                }
+                let mut report = fail_report(run_id, agent_name, goal, message);
+                report.steps = records;
+                return report;
+            }
+        };
+
         // mark the task object done before commit
         if let Some(tid) = &task_id {
             let _ = host.run_command_as(
@@ -223,9 +240,7 @@ impl AgentRuntime {
             return fail_report(run_id, agent_name, goal, e.to_string());
         }
 
-        // 3. verify — re-read the world, confirm intended effects exist
         let created: Vec<String> = created.into_iter().collect();
-        let verification = verify(host, &steps, &created);
         let summary = if records.is_empty() {
             format!(
                 "read-only goal; project has {} objects",
@@ -279,19 +294,44 @@ fn resolve_refs(input: &Value, outputs: &[Value]) -> Value {
     }
 }
 
-/// Post-run checks: every object a step claims to have created must exist.
-fn verify(host: &dyn CapabilityHost, _steps: &[PlannedStep], created: &[String]) -> Vec<String> {
-    created
-        .iter()
-        .filter_map(|id| {
-            let oid = id.parse().ok()?;
-            let obj = host.project().get(oid)?;
-            Some(format!(
+/// Every top-level output `id` must identify a surviving object, except
+/// `relation.add`, whose documented output identifies a relation.
+/// Commands with no such output have no reference-presence check.
+fn verify(host: &dyn CapabilityHost, records: &[StepRecord]) -> Result<Vec<String>, String> {
+    let mut verification = Vec::new();
+    for record in records {
+        let Some(value) = record.output.get("id") else {
+            continue;
+        };
+        let context = format!("step {} `{}`", record.index, record.command);
+        let id = value
+            .as_str()
+            .ok_or_else(|| format!("{context}: reported id is not a string"))?;
+        if record.command == "relation.add" {
+            let rid: worldos_kernel::ids::RelationId = id
+                .parse()
+                .map_err(|_| format!("{context}: invalid relation id `{id}`"))?;
+            if !host.project().relations.contains_key(&rid) {
+                return Err(format!(
+                    "{context}: reported relation `{id}` does not exist"
+                ));
+            }
+            verification.push(format!("verified relation {id}"));
+        } else {
+            let oid = id
+                .parse()
+                .map_err(|_| format!("{context}: invalid object id `{id}`"))?;
+            let obj = host
+                .project()
+                .get(oid)
+                .ok_or_else(|| format!("{context}: reported object `{id}` does not exist"))?;
+            verification.push(format!(
                 "verified object {} ({}, {})",
                 obj.name, obj.type_id, id
-            ))
-        })
-        .collect()
+            ));
+        }
+    }
+    Ok(verification)
 }
 
 fn fail_report(run_id: AgentRunId, agent: &str, goal: &str, msg: String) -> AgentReport {

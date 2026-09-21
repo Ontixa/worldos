@@ -102,9 +102,159 @@ fn llm_plan_executes_end_to_end() {
     let rt = AgentRuntime::new(Box::new(LlmPlanner::new(provider)));
     let report = rt.run(&mut e, "make a sphere called llm-ball at x=3", "llm-bot");
     assert_eq!(report.status, RunStatus::Succeeded, "{}", report.summary);
+    assert!(!report.verification.is_empty());
     let ball = e.find_object("llm-ball").expect("ball created");
     assert_eq!(ball.type_id.0, "geom:sphere");
     assert_eq!(e.history().records.last().unwrap().actor.0, "agent:llm-bot");
+}
+
+/// A command that really mutates the engine but reports an incorrect reference.
+struct IncorrectReference(serde_json::Value);
+
+impl worldos_commands::CommandHandler for IncorrectReference {
+    fn schema(&self) -> worldos_commands::CommandSchema {
+        worldos_commands::CommandSchema::write(
+            "test.incorrect_reference",
+            "test",
+            "Create an object but report an incorrect reference",
+            json!({"type": "object"}),
+        )
+    }
+
+    fn execute(
+        &self,
+        ctx: &mut worldos_commands::CommandContext,
+        _input: &serde_json::Value,
+    ) -> Result<serde_json::Value, worldos_commands::CommandError> {
+        ctx.run_sub(
+            "object.create",
+            json!({"type": "core:note", "name": "unverified"}),
+        )?;
+        Ok(json!({"id": self.0}))
+    }
+}
+
+#[test]
+fn invalid_reported_references_fail_before_commit_and_preserve_evidence() {
+    for (id, expected) in [
+        (
+            json!(worldos_kernel::ObjectId::new().to_string()),
+            "does not exist",
+        ),
+        (json!("not-an-object-id"), "invalid object id"),
+        (json!(42), "not a string"),
+    ] {
+        let mut e = Engine::new("t");
+        let before = serde_json::to_value(e.project()).unwrap();
+        let history_before = e.history().records.len();
+        e.register_command(std::sync::Arc::new(IncorrectReference(id.clone())));
+        let provider =
+            MockProvider::of(&[r#"[{"command":"test.incorrect_reference","input":{}}]"#]);
+        let rt = AgentRuntime::new(Box::new(LlmPlanner::new(provider)));
+        let report = rt.run(&mut e, "create a note", "t");
+
+        assert_eq!(report.status, RunStatus::Failed);
+        assert!(
+            report.summary.contains("verification failed"),
+            "{}",
+            report.summary
+        );
+        assert!(report.summary.contains(expected), "{}", report.summary);
+        assert_eq!(report.steps.len(), 1);
+        assert!(
+            report.steps[0].ok,
+            "command success is distinct from verification"
+        );
+        assert_eq!(report.steps[0].output["id"], id);
+        assert!(report.verification.is_empty());
+        assert!(report.created_objects.is_empty());
+        assert_eq!(serde_json::to_value(e.project()).unwrap(), before);
+        assert_eq!(e.history().records.len(), history_before);
+        assert!(!worldos_capability::CapabilityHost::in_transaction(&e));
+    }
+}
+
+#[test]
+fn reference_removed_by_later_step_fails_atomically() {
+    let mut e = Engine::new("t");
+    let before = serde_json::to_value(e.project()).unwrap();
+    let provider = MockProvider::of(&[r#"[
+        {"command":"object.create","input":{"type":"core:note","name":"temporary"}},
+        {"command":"object.delete","input":{"id":"$0.id"}}
+    ]"#]);
+    let rt = AgentRuntime::new(Box::new(LlmPlanner::new(provider)));
+    let report = rt.run(&mut e, "create then delete a note", "t");
+    assert_eq!(report.status, RunStatus::Failed);
+    assert!(
+        report.summary.contains("does not exist"),
+        "{}",
+        report.summary
+    );
+    assert!(report.steps.iter().all(|step| step.ok));
+    assert_eq!(serde_json::to_value(e.project()).unwrap(), before);
+    assert!(e.history().records.is_empty());
+}
+
+#[test]
+fn relation_output_is_verified_as_a_relation_and_run_is_undoable() {
+    let mut e = Engine::new("t");
+    let provider = MockProvider::of(&[r#"[
+        {"command":"object.create","input":{"type":"core:note","name":"a"}},
+        {"command":"object.create","input":{"type":"core:note","name":"b"}},
+        {"command":"relation.add","input":{"type":"core:references","from":"$0.id","to":"$1.id"}}
+    ]"#]);
+    let rt = AgentRuntime::new(Box::new(LlmPlanner::new(provider)));
+    let report = rt.run(&mut e, "create linked notes", "t");
+    assert_eq!(report.status, RunStatus::Succeeded, "{}", report.summary);
+    assert_eq!(report.created_objects.len(), 2);
+    assert_eq!(report.verification.len(), 3);
+    assert!(report.verification[2].starts_with("verified relation "));
+    assert_eq!(e.history().records.len(), 1);
+    e.undo().unwrap();
+    assert!(e.find_object("a").is_none());
+    assert!(e.find_object("b").is_none());
+}
+
+#[test]
+fn relation_removed_by_later_step_fails_atomically() {
+    let mut e = Engine::new("t");
+    let before = serde_json::to_value(e.project()).unwrap();
+    let provider = MockProvider::of(&[r#"[
+        {"command":"object.create","input":{"type":"core:note","name":"a"}},
+        {"command":"object.create","input":{"type":"core:note","name":"b"}},
+        {"command":"relation.add","input":{"type":"core:references","from":"$0.id","to":"$1.id"}},
+        {"command":"relation.remove","input":{"id":"$2.id"}}
+    ]"#]);
+    let rt = AgentRuntime::new(Box::new(LlmPlanner::new(provider)));
+    let report = rt.run(&mut e, "create then remove a relation", "t");
+    assert_eq!(report.status, RunStatus::Failed);
+    assert!(
+        report.summary.contains("reported relation"),
+        "{}",
+        report.summary
+    );
+    assert!(
+        report.summary.contains("does not exist"),
+        "{}",
+        report.summary
+    );
+    assert!(report.steps.iter().all(|step| step.ok));
+    assert_eq!(serde_json::to_value(e.project()).unwrap(), before);
+    assert!(e.history().records.is_empty());
+}
+
+#[test]
+fn standalone_deletion_does_not_require_deleted_object_to_survive() {
+    let mut e = Engine::new("t");
+    e.execute("object.create", json!({"type":"core:note", "name":"old"}))
+        .unwrap();
+    let rt = AgentRuntime::new(Box::new(RulePlanner));
+    let report = rt.run(&mut e, "delete old", "t");
+    assert_eq!(report.status, RunStatus::Succeeded, "{}", report.summary);
+    assert!(e.find_object("old").is_none());
+    assert!(report.verification.is_empty());
+    e.undo().unwrap();
+    assert!(e.find_object("old").is_some());
 }
 
 #[test]

@@ -43,7 +43,14 @@ Brutally honest current-state constraints. Updated when reality changes.
   pre-planned command list in one transaction; it does not yet
   observe → act → inspect → re-plan iteratively.
 - **No deterministic goal verifier.** Verification checks that
-  commands ran, not that the user's objective is semantically true.
+  top-level output `id` references still exist before committing, not
+  that the user's objective is semantically true. `relation.add`
+  references are checked as relations; other `id` outputs are checked
+  as objects. Malformed or absent references fail the run and trigger
+  rollback, retaining command outputs in the failure report. Plans that
+  return a reference and delete it later in the same run also fail this
+  final-state check. Commands without an `id` output have no reference
+  check; this is not full postcondition or goal verification.
 - **LLM planner is BYOK-only** (`WORLDOS_LLM_*`); no bundled provider.
 
 ## Scale & platform
