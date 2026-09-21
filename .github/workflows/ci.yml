@@ -40,6 +40,8 @@ jobs:
         run: npm ci
       - name: build TS SDK
         run: npm run build -w @worldos/sdk
+      - name: test TS SDK
+        run: npm run test -w @worldos/sdk
       - name: compile Python SDK
         run: python -m py_compile sdks/worldos-py/worldos.py
 

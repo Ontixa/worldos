@@ -56,6 +56,7 @@ try {
     if (-not $Crate -and $Suite -in @("sdks", "all")) {
         if (Test-Path (Join-Path $root "node_modules")) {
             Step "ts sdk build" { npm run build -w @worldos/sdk }
+            Step "ts sdk test" { npm run test -w @worldos/sdk }
         } else {
             Write-Host "`n== ts sdk build == skipped (npm ci first)" -ForegroundColor DarkGray
         }

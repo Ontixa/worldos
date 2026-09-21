@@ -129,8 +129,8 @@ foreach ($comp in @("clippy", "rustfmt")) {
 Write-Host "`nJS toolchain"
 $node = Get-CmdVersion node
 $npm = Get-CmdVersion npm "--version"
-Write-Check "node" ([bool]$node) "$node" "Install Node >= 20"
-Write-Check "npm" ([bool]$npm) "v$npm" "Install Node >= 20"
+Write-Check "node" ([bool]$node) "$node" "Install Node 20.x, 22.x, or >=24 (version range not enforced here)"
+Write-Check "npm" ([bool]$npm) "v$npm" "Install Node 20.x, 22.x, or >=24"
 $npmModules = Test-Path (Join-Path (Join-Path $PSScriptRoot "..") "node_modules")
 if ($npmModules) { Write-Check "npm install" $true "node_modules present" } else { Write-Warn "npm install" "node_modules missing" "npm ci" }
 

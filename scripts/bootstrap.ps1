@@ -52,7 +52,7 @@ function Require {
 Write-Host "`nRequired"
 Require "Rust (rustup/cargo)" "cargo" "Rustlang.Rustup" "workspace builds, tests, clippy"
 Require "Git for Windows"    "git"   "Git.Git"         "version control  -  Windows-native, not WSL"
-Require "Node.js >= 20"      "node"  "OpenJS.NodeJS"   "TS SDK + desktop frontend"
+Require "Node.js 20.x, 22.x, or >=24" "node" "OpenJS.NodeJS" "TS SDK + desktop frontend (version range not enforced here)"
 
 Write-Host "`nRecommended"
 Require "GitHub CLI"         "gh"    "GitHub.cli"      "PRs, issues, releases"
