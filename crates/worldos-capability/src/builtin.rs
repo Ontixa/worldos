@@ -151,7 +151,7 @@ impl Capability for GeometryMeasure {
     fn descriptor(&self) -> CapabilityDescriptor {
         CapabilityDescriptor::new(
             "geometry.measure",
-            "Compute bounding box, volume and surface area of a primitive",
+            "Compute bounding box, volume and surface area of a primitive or imported mesh",
             json!({
                 "type": "object",
                 "properties": {"id": {"type": "string"}, "name": {"type": "string"}}
@@ -175,6 +175,26 @@ impl Capability for GeometryMeasure {
             .ok_or_else(|| fail(format!("object `{key}` not found")))?;
         let obj = host.project().get(oid).ok_or_else(|| fail("gone"))?;
         use worldos_kernel::measure as m;
+        // geom:mesh objects measure their stored triangles; a corrupt
+        // component surfaces the parse error rather than a silent zero.
+        if obj
+            .component_data(worldos_kernel::known::components::MESH)
+            .is_some()
+        {
+            let mesh = worldos_kernel::mesh::object_mesh(obj).map_err(fail)?;
+            let (bmin, bmax) = mesh.bbox().ok_or_else(|| fail("mesh is empty"))?;
+            let dims = [bmax[0] - bmin[0], bmax[1] - bmin[1], bmax[2] - bmin[2]];
+            return Ok(json!({
+                "id": oid.to_string(),
+                "kind": "mesh",
+                "dimensions": dims,
+                "bbox": {"min": bmin, "max": bmax},
+                "volume": mesh.signed_volume().abs(),
+                "surface_area": mesh.surface_area(),
+                "vertices": mesh.positions.len(),
+                "triangles": mesh.triangle_count(),
+            }));
+        }
         let kind = m::object_kind(obj).unwrap_or("").to_string();
         let dims = m::object_dims(obj).unwrap_or([1.0, 1.0, 1.0]);
         let (volume, area) = m::measure_primitive(&kind, dims);
@@ -224,6 +244,42 @@ impl Capability for GeometryExport {
     }
 }
 
+// ---------------------------------------------------------------- mesh import
+
+/// `geometry.import` — governed wrapper over the same-named command so
+/// agents/MCP/SDK callers reach mesh import through the capability
+/// registry. Not deterministic: it reads from the filesystem.
+pub struct GeometryImport;
+
+impl Capability for GeometryImport {
+    fn descriptor(&self) -> CapabilityDescriptor {
+        CapabilityDescriptor::new(
+            "geometry.import",
+            "Import a mesh file (binary STL or OBJ) into a new geom:mesh object",
+            json!({
+                "type": "object",
+                "required": ["path"],
+                "properties": {
+                    "path": {"type": "string"},
+                    "format": {"type": "string", "enum": ["stl", "obj"]},
+                    "name": {"type": "string"},
+                    "position": {"type": "array", "items": {"type": "number"}},
+                    "color": {"type": "string"},
+                    "parent": {"type": "string"}
+                }
+            }),
+        )
+        .requires(&[permissions::ARTIFACT_IMPORT, permissions::FILESYSTEM_READ])
+    }
+    fn execute(
+        &self,
+        host: &mut dyn CapabilityHost,
+        input: &Value,
+    ) -> Result<Value, CapabilityError> {
+        host.run_command("geometry.import", input.clone())
+    }
+}
+
 /// All builtin capabilities.
 pub fn builtins() -> Vec<std::sync::Arc<dyn Capability>> {
     vec![
@@ -233,5 +289,6 @@ pub fn builtins() -> Vec<std::sync::Arc<dyn Capability>> {
         std::sync::Arc::new(ArtifactExport),
         std::sync::Arc::new(GeometryMeasure),
         std::sync::Arc::new(GeometryExport),
+        std::sync::Arc::new(GeometryImport),
     ]
 }

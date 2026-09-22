@@ -60,6 +60,12 @@ fn tools() -> Vec<Value> {
                "inputSchema": obj(&["path"], json!({"id": {"type":"string"}, "name": {"type":"string"},
                     "object": {"type":"string"}, "path": {"type":"string"},
                     "format": {"type":"string", "enum": ["stl","obj"]}}))}),
+        json!({"name": "geometry_import", "description": "Import a mesh file (binary STL or OBJ) into a new geom:mesh object; needs filesystem.read",
+               "inputSchema": obj(&["path"], json!({"path": {"type":"string"},
+                    "format": {"type":"string", "enum": ["stl","obj"]},
+                    "name": {"type":"string"},
+                    "position": {"type":"array", "items": {"type":"number"}},
+                    "color": {"type":"string"}, "parent": {"type":"string"}}))}),
         json!({"name": "plugin_run", "description": "Run a hosted worldos-plugin-* executable in one transaction",
                "inputSchema": obj(&["plugin"], json!({"plugin": {"type":"string"},
                     "args": {"type":"array", "items": {"type":"string"}}}))}),
@@ -106,6 +112,10 @@ fn tool_call(service: &RpcService, name: &str, args: &Value) -> Result<Value, St
         "geometry_export" => (
             "capability.execute",
             json!({"id": "geometry.export", "input": args}),
+        ),
+        "geometry_import" => (
+            "capability.execute",
+            json!({"id": "geometry.import", "input": args}),
         ),
         "plugin_run" => (
             "capability.execute",

@@ -28,8 +28,11 @@ Domain lenses on the same kernel. Ordered by leverage:
    ✅ `geometry.export` command + capability: deterministic mesh export of
    `geom:*` primitives to binary STL / OBJ files (`kernel::mesh`
    tessellation; `cad:body` stays on `cad.export_stl`).
-   Next: parametric sketches/constraints, B-rep boundary (OCCT eval),
-   mesh import
+   ✅ `geometry.import` command + capability: binary STL / OBJ files parse
+   into `geom:mesh` objects (hand-rolled `kernel::mesh_import`, no new
+   deps) — measurable via `geometry.measure`/`volume()`/`area()` and
+   re-exportable byte-identically.
+   Next: parametric sketches/constraints, B-rep boundary (OCCT eval)
 2. **Real agent intelligence** — ✅ `LlmPlanner` over `ModelProvider`
    (OpenAI-compatible BYOK via `WORLDOS_LLM_*`), self-repair reprompt,
    `FallbackPlanner` chain to rules, unknown-command validation, and

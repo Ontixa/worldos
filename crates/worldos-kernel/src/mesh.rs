@@ -1,9 +1,11 @@
-//! Deterministic tessellation of the analytic `geom:*` primitives.
+//! Deterministic tessellation of the analytic `geom:*` primitives, plus
+//! the `geom:mesh` component payload produced by `geometry.import`.
 //!
 //! Sibling of [`crate::measure`]: primitives carry analytic shape data
 //! (`geom:geometry.size`, `core:transform.scale`/`position`), so a mesh
 //! can be generated without a B-rep kernel. The output feeds the
-//! `geometry.export` command — binary STL / OBJ writers live here too.
+//! `geometry.export` command — binary STL / OBJ writers live here too;
+//! the matching parsers live in [`crate::mesh_import`].
 //!
 //! ## Conventions (match `kernel::measure`)
 //!
@@ -65,6 +67,56 @@ impl Mesh {
             p[1] += d[1];
             p[2] += d[2];
         }
+    }
+
+    /// Multiply every vertex componentwise by `s` (used to apply
+    /// `core:transform.scale` to stored `geom:mesh` geometry).
+    pub fn scale(&mut self, s: [f64; 3]) {
+        for p in &mut self.positions {
+            p[0] *= s[0];
+            p[1] *= s[1];
+            p[2] *= s[2];
+        }
+    }
+
+    /// Signed volume via the divergence theorem — positive iff the mesh
+    /// is closed with outward-wound triangles. Open meshes (imported
+    /// surfaces, `plane` exports) report whatever the partial sums give;
+    /// treat magnitude, not sign, as the measured volume.
+    pub fn signed_volume(&self) -> f64 {
+        let mut v = 0.0;
+        for &[i0, i1, i2] in self.indices.as_chunks::<3>().0 {
+            let [a, b, c] = [
+                self.positions[i0 as usize],
+                self.positions[i1 as usize],
+                self.positions[i2 as usize],
+            ];
+            v += a[0] * (b[1] * c[2] - b[2] * c[1])
+                + a[1] * (b[2] * c[0] - b[0] * c[2])
+                + a[2] * (b[0] * c[1] - b[1] * c[0]);
+        }
+        v / 6.0
+    }
+
+    /// Sum of triangle areas.
+    pub fn surface_area(&self) -> f64 {
+        let mut area = 0.0;
+        for &[i0, i1, i2] in self.indices.as_chunks::<3>().0 {
+            let [a, b, c] = [
+                self.positions[i0 as usize],
+                self.positions[i1 as usize],
+                self.positions[i2 as usize],
+            ];
+            let u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+            let v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+            let n = [
+                u[1] * v[2] - u[2] * v[1],
+                u[2] * v[0] - u[0] * v[2],
+                u[0] * v[1] - u[1] * v[0],
+            ];
+            area += 0.5 * (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+        }
+        area
     }
 
     /// Axis-aligned bounding box `[min, max]`; `None` for an empty mesh.
@@ -130,18 +182,98 @@ fn positive(kind: &str, dims: [f64; 3]) -> Result<(), KernelError> {
     }
 }
 
-/// Mesh for an object's analytic geometry, placed at its
-/// `core:transform.position` (world-space, like `object_bbox`).
-/// Errors when the object carries no `geom:geometry` component.
+/// Mesh for an object's geometry in world space, placed at its
+/// `core:transform.position` (like `object_bbox`). `geom:mesh` objects
+/// return their stored component mesh scaled by `core:transform.scale`;
+/// `geom:*` primitives tessellate analytically (dims = size × scale).
+/// Rotation is NOT applied — same caveat as `object_bbox`. Errors when
+/// the object carries neither a `geom:mesh` component nor a
+/// `geom:geometry` kind.
 pub fn object_mesh(obj: &Object) -> Result<Mesh, KernelError> {
-    let kind = crate::measure::object_kind(obj)
-        .ok_or_else(|| bad(format!("object `{}` has no geom:geometry kind", obj.name)))?
-        .to_string();
-    let dims = crate::measure::object_dims(obj)
-        .ok_or_else(|| bad(format!("object `{}` has no geometry dims", obj.name)))?;
-    let mut mesh = tessellate(&kind, dims)?;
+    let mut mesh = match stored_mesh(obj)? {
+        Some(mut m) => {
+            m.scale(crate::measure::object_scale(obj));
+            m
+        }
+        None => {
+            let kind = crate::measure::object_kind(obj)
+                .ok_or_else(|| bad(format!("object `{}` has no geom:geometry kind", obj.name)))?
+                .to_string();
+            let dims = crate::measure::object_dims(obj)
+                .ok_or_else(|| bad(format!("object `{}` has no geometry dims", obj.name)))?;
+            tessellate(&kind, dims)?
+        }
+    };
     mesh.translate(crate::measure::object_position(obj));
     Ok(mesh)
+}
+
+/// The local-space mesh stored in a `geom:mesh` component, if the
+/// object carries one. Malformed component data fails closed — a mesh
+/// that cannot be decoded is not geometry at all.
+pub fn stored_mesh(obj: &Object) -> Result<Option<Mesh>, KernelError> {
+    let Some(data) = obj.component_data(crate::known::components::MESH) else {
+        return Ok(None);
+    };
+    mesh_from_component(data).map(Some)
+}
+
+/// Serialize `mesh` into `geom:mesh` component data. `source` records
+/// provenance (format/path/digest of the imported file) verbatim.
+pub fn mesh_to_component(mesh: &Mesh, source: serde_json::Value) -> serde_json::Value {
+    serde_json::json!({
+        "positions": mesh.positions,
+        "indices": mesh.indices,
+        "source": source,
+    })
+}
+
+/// Decode `geom:mesh` component data back into a [`Mesh`]. Every number
+/// must be finite and every index in bounds — the component is
+/// schema-versioned graph data, so corrupt payloads are reported, not
+/// silently repaired.
+pub fn mesh_from_component(data: &serde_json::Value) -> Result<Mesh, KernelError> {
+    let positions = data["positions"]
+        .as_array()
+        .ok_or_else(|| bad("geom:mesh.positions must be an array"))?;
+    let mut out_positions = Vec::with_capacity(positions.len());
+    for (i, p) in positions.iter().enumerate() {
+        let xyz = p
+            .as_array()
+            .filter(|a| a.len() == 3)
+            .ok_or_else(|| bad(format!("geom:mesh.positions[{i}] must be [x,y,z]")))?;
+        let mut v = [0.0; 3];
+        for (axis, x) in xyz.iter().enumerate() {
+            v[axis] = x
+                .as_f64()
+                .filter(|f| f.is_finite())
+                .ok_or_else(|| bad(format!("geom:mesh.positions[{i}][{axis}] is not finite")))?;
+        }
+        out_positions.push(v);
+    }
+    let indices = data["indices"]
+        .as_array()
+        .ok_or_else(|| bad("geom:mesh.indices must be an array"))?;
+    if indices.len() % 3 != 0 {
+        return Err(bad("geom:mesh.indices length is not a multiple of 3"));
+    }
+    let mut out_indices = Vec::with_capacity(indices.len());
+    for (i, idx) in indices.iter().enumerate() {
+        let idx = idx
+            .as_u64()
+            .ok_or_else(|| bad(format!("geom:mesh.indices[{i}] is not a uint")))?;
+        if idx >= out_positions.len() as u64 {
+            return Err(bad(format!(
+                "geom:mesh.indices[{i}]={idx} out of bounds ({} vertices)",
+                out_positions.len()
+            )));
+        }
+        out_indices.push(idx as u32);
+    }
+    Ok(Mesh {
+        positions: out_positions,
+        indices: out_indices,
+    })
 }
 
 // ------------------------------------------------------------------ solids
@@ -315,7 +447,10 @@ fn facet_normal(a: [f64; 3], b: [f64; 3], c: [f64; 3]) -> [f64; 3] {
 
 /// Binary STL (80-byte header + u32 count + 50 bytes per facet).
 /// Deterministic: fixed header text, little-endian f32 fields, no
-/// timestamps — identical meshes produce identical files.
+/// timestamps — identical meshes produce identical files. Normals are
+/// computed from the *quantized* f32 vertex data actually written, so
+/// the facet record describes the emitted geometry — and an imported
+/// (f32-quantized) mesh re-exports byte-identically.
 pub fn to_binary_stl(mesh: &Mesh) -> Vec<u8> {
     const HEADER: &[u8] = b"worldos geometry.export binary stl";
     let mut out = Vec::with_capacity(84 + mesh.triangle_count() * 50);
@@ -324,11 +459,10 @@ pub fn to_binary_stl(mesh: &Mesh) -> Vec<u8> {
     out.extend_from_slice(&(mesh.triangle_count() as u32).to_le_bytes());
     let push_f32 = |out: &mut Vec<u8>, v: f64| out.extend_from_slice(&(v as f32).to_le_bytes());
     for &[i0, i1, i2] in mesh.indices.as_chunks::<3>().0 {
-        let [a, b, c] = [
-            mesh.positions[i0 as usize],
-            mesh.positions[i1 as usize],
-            mesh.positions[i2 as usize],
-        ];
+        // quantize to the stored precision first: normal and vertices
+        // then describe the same numbers
+        let q = |i: u32| mesh.positions[i as usize].map(|v| v as f32 as f64);
+        let [a, b, c] = [q(i0), q(i1), q(i2)];
         for v in facet_normal(a, b, c) {
             push_f32(&mut out, v);
         }
@@ -359,23 +493,6 @@ pub fn to_obj(mesh: &Mesh) -> Vec<u8> {
 mod tests {
     use super::*;
 
-    /// Signed volume via divergence theorem — positive iff the mesh is
-    /// closed with outward-wound triangles.
-    fn signed_volume(m: &Mesh) -> f64 {
-        let mut v = 0.0;
-        for &[i0, i1, i2] in m.indices.as_chunks::<3>().0 {
-            let [a, b, c] = [
-                m.positions[i0 as usize],
-                m.positions[i1 as usize],
-                m.positions[i2 as usize],
-            ];
-            v += a[0] * (b[1] * c[2] - b[2] * c[1])
-                + a[1] * (b[2] * c[0] - b[0] * c[2])
-                + a[2] * (b[0] * c[1] - b[1] * c[0]);
-        }
-        v / 6.0
-    }
-
     #[test]
     fn primitives_have_positive_outward_volume() {
         for (kind, d) in [
@@ -387,9 +504,9 @@ mod tests {
         ] {
             let m = tessellate(kind, d).unwrap();
             assert!(
-                signed_volume(&m) > 0.0,
+                m.signed_volume() > 0.0,
                 "{kind} wound inward (signed volume {})",
-                signed_volume(&m)
+                m.signed_volume()
             );
         }
     }
@@ -398,13 +515,13 @@ mod tests {
     fn volumes_approach_analytic_measures() {
         let sphere = tessellate("sphere", [2.0, 2.0, 2.0]).unwrap();
         let exact = 4.0 / 3.0 * PI; // r = 1
-        assert!((signed_volume(&sphere) / exact - 1.0).abs() < 0.02);
+        assert!((sphere.signed_volume() / exact - 1.0).abs() < 0.02);
         let cyl = tessellate("cylinder", [2.0, 2.0, 5.0]).unwrap();
-        assert!((signed_volume(&cyl) / (PI * 5.0) - 1.0).abs() < 0.02);
+        assert!((cyl.signed_volume() / (PI * 5.0) - 1.0).abs() < 0.02);
         let torus = tessellate("torus", [4.0, 1.0, 4.0]).unwrap();
         // outer radius 2, tube 0.5 → centerline R = 1.5
         let exact_t = 2.0 * PI * PI * 1.5 * 0.25;
-        assert!((signed_volume(&torus) / exact_t - 1.0).abs() < 0.02);
+        assert!((torus.signed_volume() / exact_t - 1.0).abs() < 0.02);
     }
 
     #[test]
@@ -456,6 +573,20 @@ mod tests {
         assert_eq!(text.lines().filter(|l| l.starts_with("v ")).count(), 8);
         assert_eq!(text.lines().filter(|l| l.starts_with("f ")).count(), 12);
         assert!(text.contains("f 1 4 3")); // cube face 0 is verts 0,3,2
+    }
+
+    #[test]
+    fn component_survives_project_json_roundtrip() {
+        // `.worldos` files store components as JSON text; the workspace
+        // pins serde_json's `float_roundtrip` so f64 -> text -> f64 is
+        // exact (the default parser is up to 1 ULP off — enough to break
+        // byte-identical OBJ re-export after a save/load cycle).
+        let orig = tessellate("cylinder", [2.0, 2.0, 5.0]).unwrap();
+        let comp = mesh_to_component(&orig, serde_json::json!({"format": "obj"}));
+        let text = serde_json::to_string(&comp).unwrap();
+        let back = mesh_from_component(&serde_json::from_str(&text).unwrap()).unwrap();
+        assert_eq!(back, orig);
+        assert_eq!(to_obj(&back), to_obj(&orig));
     }
 
     #[test]

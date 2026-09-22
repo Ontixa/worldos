@@ -18,10 +18,14 @@ pub mod types {
     pub const PLANE: &str = "geom:plane";
     pub const CONE: &str = "geom:cone";
     pub const TORUS: &str = "geom:torus";
+    /// Imported triangle mesh (`geom:mesh` component holds the geometry).
+    pub const MESH: &str = "geom:mesh";
     /// B-rep solid produced by the CAD kernel (worldos-cad).
     pub const CAD_BODY: &str = "cad:body";
 
-    /// True for builtin spatial primitive types.
+    /// True for builtin spatial primitive types. `geom:mesh` is
+    /// deliberately not a primitive: its shape lives in component data,
+    /// not in analytic `kind`/`size` parameters.
     pub fn is_primitive(t: &str) -> bool {
         matches!(t, CUBE | SPHERE | CYLINDER | PLANE | CONE | TORUS)
     }
@@ -43,6 +47,9 @@ pub mod components {
     /// Derived kernel output: artifact refs + measures + topology
     /// (worldos-cad::CadShape).
     pub const CAD_SHAPE: &str = "cad:shape";
+    /// Indexed triangle mesh (`positions`/`indices`/`source`) written by
+    /// `geometry.import`; decoded via `kernel::mesh::stored_mesh`.
+    pub const MESH: &str = "geom:mesh";
 }
 
 pub mod rel {
@@ -62,6 +69,7 @@ pub mod permissions {
     pub const CAPABILITY_EXECUTE: &str = "capability.execute";
     pub const VALIDATION_RUN: &str = "validation.run";
     pub const ARTIFACT_EXPORT: &str = "artifact.export";
+    pub const ARTIFACT_IMPORT: &str = "artifact.import";
     pub const FILESYSTEM_READ: &str = "filesystem.read";
     pub const FILESYSTEM_WRITE: &str = "filesystem.write";
     pub const NETWORK_ACCESS: &str = "network.access";

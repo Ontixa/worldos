@@ -51,6 +51,7 @@ pub fn builtin_handlers() -> Vec<Arc<dyn crate::handler::CommandHandler>> {
         Arc::new(GeometryCreatePrimitive),
         Arc::new(GeometryTransform),
         Arc::new(GeometryExport),
+        Arc::new(GeometryImport),
         Arc::new(ProjectRename),
         Arc::new(ProjectSetMeta),
         Arc::new(RequirementCreate),

@@ -3,7 +3,10 @@
 //! Primitives carry analytic shape data (`geom:geometry.size`,
 //! `core:transform.scale`) so measurement needs no mesh kernel — the same
 //! numbers back the `geometry.measure` capability, requirement terms like
-//! `volume(x)` / `distance(a,b)`, and future validators.
+//! `volume(x)` / `distance(a,b)`, and future validators. `geom:mesh`
+//! objects (written by `geometry.import`) measure their stored triangle
+//! mesh instead: volume via the divergence theorem, area by summing
+//! triangles — see [`object_measures`].
 
 use crate::known::components;
 use crate::model::Object;
@@ -13,11 +16,15 @@ use serde_json::Value;
 /// `None` when the object has no geometry component.
 pub fn object_dims(obj: &Object) -> Option<[f64; 3]> {
     let geom = obj.component_data(components::GEOMETRY)?;
-    let xf = obj.component_data(components::TRANSFORM);
-    let scale = xf
-        .map(|t| vec3(&t["scale"], [1.0, 1.0, 1.0]))
-        .unwrap_or([1.0, 1.0, 1.0]);
+    let scale = object_scale(obj);
     Some(size_dims(&geom["size"], scale))
+}
+
+/// `[x,y,z]` scale from `core:transform.scale` (default `[1,1,1]`).
+pub fn object_scale(obj: &Object) -> [f64; 3] {
+    obj.component_data(components::TRANSFORM)
+        .map(|t| vec3(&t["scale"], [1.0, 1.0, 1.0]))
+        .unwrap_or([1.0, 1.0, 1.0])
 }
 
 /// World-space position from `core:transform.position`.
@@ -80,14 +87,37 @@ pub fn measure_primitive(kind: &str, d: [f64; 3]) -> (f64, f64) {
     }
 }
 
-/// Axis-aligned bounding box `[min, max]` around the object's position.
+/// Axis-aligned bounding box `[min, max]` in world space. `geom:mesh`
+/// objects take the real mesh bounds (scale + position applied);
+/// primitives use the analytic dims centered on the position. Rotation
+/// is not applied (documented caveat — same as `kernel::mesh`).
 pub fn object_bbox(obj: &Object) -> Option<([f64; 3], [f64; 3])> {
+    if obj.component_data(components::MESH).is_some() {
+        return crate::mesh::object_mesh(obj).ok()?.bbox();
+    }
     let d = object_dims(obj)?;
     let p = object_position(obj);
     Some((
         [p[0] - d[0] / 2.0, p[1] - d[1] / 2.0, p[2] - d[2] / 2.0],
         [p[0] + d[0] / 2.0, p[1] + d[1] / 2.0, p[2] + d[2] / 2.0],
     ))
+}
+
+/// `(volume, surface_area)` for any measurable object: a `geom:mesh`
+/// component measures its stored mesh (transform applied — divergence
+/// theorem on the actual triangles, so non-uniform scale is honored);
+/// `geom:*` primitives measure analytically. `None` when the object has
+/// no measurable geometry — including a `geom:mesh` component that
+/// fails to decode (callers needing the parse error use
+/// [`crate::mesh::object_mesh`] directly).
+pub fn object_measures(obj: &Object) -> Option<(f64, f64)> {
+    if obj.component_data(components::MESH).is_some() {
+        let m = crate::mesh::object_mesh(obj).ok()?;
+        return Some((m.signed_volume().abs(), m.surface_area()));
+    }
+    let dims = object_dims(obj)?;
+    let kind = object_kind(obj).unwrap_or("");
+    Some(measure_primitive(kind, dims))
 }
 
 /// The `geom:geometry.kind` string, if present.
