@@ -8,7 +8,7 @@ use crate::error::CommandError;
 use crate::handler::{CommandContext, CommandHandler};
 use crate::schema::{CommandSchema, props};
 use serde_json::{Value, json};
-use std::io::Write;
+use std::io::{Read, Write};
 use worldos_kernel::actor::Permission;
 use worldos_kernel::known::{components, permissions, types};
 
@@ -277,6 +277,181 @@ impl CommandHandler for GeometryExport {
             "sha256": digest,
         }))
     }
+}
+
+/// `geometry.import` — read a binary STL / OBJ file and create a
+/// `geom:mesh` object carrying the decoded triangles in its `geom:mesh`
+/// component (the inverse of `geometry.export`: that file is exactly
+/// what this command reads back).
+///
+/// Containment mirrors the file-facing surface: `..` segments are
+/// refused, the source must be a regular file within the shared
+/// 64 MiB read bound, and the actor needs `filesystem.read` on top of
+/// the schema's `artifact.import` — the default agent/plugin grants
+/// include neither. Parsing fails closed on truncation, non-finite
+/// vertices, out-of-range indices, ASCII STL, unknown formats, and
+/// meshes over `mesh_import::MAX_IMPORT_TRIANGLES`; a failure writes
+/// nothing (the auto-transaction rolls back), so project and history
+/// stay untouched.
+///
+/// The mesh is stored in the file's own coordinates as the object's
+/// local geometry; `position` places it like any primitive. Volume/
+/// area/bbox come from the stored triangles (`measure::object_measures`),
+/// and `geometry.export` re-exports `geom:mesh` objects verbatim — an
+/// imported file round-trips byte-identically.
+pub struct GeometryImport;
+
+impl CommandHandler for GeometryImport {
+    fn schema(&self) -> CommandSchema {
+        CommandSchema::write(
+            "geometry.import",
+            "geometry",
+            "Import a mesh file (binary STL or OBJ) into a new geom:mesh object",
+            props::object(
+                &["path"],
+                json!({
+                    "path": {"type": "string", "description": "source file — `..` rejected"},
+                    "format": {"type": "string", "enum": ["stl", "obj"], "description": "default: inferred from the file extension"},
+                    "name": {"type": "string"},
+                    "position": {"type": "array", "items": {"type": "number"}},
+                    "color": {"type": "string", "description": "css color e.g. #8ab4f8"},
+                    "parent": {"type": "string"}
+                }),
+            ),
+        )
+        .permission(permissions::ARTIFACT_IMPORT)
+    }
+
+    fn execute(&self, ctx: &mut CommandContext, input: &Value) -> Result<Value, CommandError> {
+        // Deny before touching the filesystem — same in-handler pattern
+        // as cad.import_step's `file` input and geometry.export's write.
+        if !ctx
+            .actor
+            .permissions
+            .is_allowed(&Permission(permissions::FILESYSTEM_READ.into()))
+        {
+            return Err(CommandError::PermissionDenied {
+                command: "geometry.import".into(),
+                perm: permissions::FILESYSTEM_READ.into(),
+            });
+        }
+        let path = input["path"]
+            .as_str()
+            .ok_or_else(|| CommandError::Failed("missing `path`".into()))?;
+        if path.is_empty() {
+            return Err(CommandError::Failed("empty `path`".into()));
+        }
+        // same traversal guard as the artifact.export capability
+        if path.split(['/', '\\']).any(|seg| seg == "..") {
+            return Err(CommandError::Failed(
+                "path traversal (`..`) is not allowed".into(),
+            ));
+        }
+        let format = worldos_kernel::mesh_import::MeshFormat::detect(
+            input.get("format").and_then(|f| f.as_str()),
+            path,
+        )
+        .map_err(CommandError::Kernel)?;
+
+        // Bounded read of a regular file — the same 64 MiB ceiling the
+        // artifact reader enforces (worldos_artifact::MAX_EXPORT_BYTES).
+        let meta = std::fs::symlink_metadata(path)
+            .map_err(|e| CommandError::Failed(format!("cannot read `{path}`: {e}")))?;
+        if !meta.file_type().is_file() {
+            return Err(CommandError::Failed(format!(
+                "`{path}` is not a regular file"
+            )));
+        }
+        if meta.len() > worldos_artifact::MAX_EXPORT_BYTES {
+            return Err(CommandError::Failed(format!(
+                "`{path}` exceeds the {}-byte import limit",
+                worldos_artifact::MAX_EXPORT_BYTES
+            )));
+        }
+        let mut bytes = Vec::with_capacity(meta.len() as usize);
+        std::fs::File::open(path)
+            .map_err(|e| CommandError::Failed(format!("cannot read `{path}`: {e}")))?
+            .take(worldos_artifact::MAX_EXPORT_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|e| CommandError::Failed(format!("cannot read `{path}`: {e}")))?;
+        if bytes.len() as u64 > worldos_artifact::MAX_EXPORT_BYTES {
+            return Err(CommandError::Failed(format!(
+                "`{path}` exceeds the {}-byte import limit",
+                worldos_artifact::MAX_EXPORT_BYTES
+            )));
+        }
+
+        let mesh =
+            worldos_kernel::mesh_import::parse(format, &bytes).map_err(CommandError::Kernel)?;
+        let digest = worldos_artifact::ArtifactRef::of(&bytes).to_string();
+
+        let name = input
+            .get("name")
+            .and_then(|n| n.as_str())
+            .map(String::from)
+            .or_else(|| {
+                std::path::Path::new(path)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .filter(|s| !s.is_empty())
+                    .map(String::from)
+            })
+            .unwrap_or_else(|| format!("mesh-{}", mesh_seq(ctx)));
+        let position = input.get("position").cloned().unwrap_or(json!([0, 0, 0]));
+        let color = input.get("color").cloned().unwrap_or(json!("#9aa7b8"));
+
+        let source = json!({
+            "format": format_str(format),
+            "path": path,
+            "sha256": digest,
+            "bytes": bytes.len(),
+        });
+        let mut args = json!({
+            "type": types::MESH,
+            "name": name,
+            "components": {
+                components::TRANSFORM: {
+                    "position": position, "rotation": [0, 0, 0], "scale": [1, 1, 1]
+                },
+                components::MESH: worldos_kernel::mesh::mesh_to_component(&mesh, source),
+                components::MATERIAL: {"color": color, "roughness": 0.7, "metallic": 0.0}
+            },
+        });
+        if let Some(p) = input.get("parent") {
+            args["parent"] = p.clone();
+        }
+        let out = ctx
+            .run_sub("object.create", args)
+            .map_err(|e| CommandError::Failed(format!("object.create failed: {e}")))?;
+        Ok(json!({
+            "id": out["id"],
+            "name": name,
+            "type": types::MESH,
+            "path": path,
+            "format": format_str(format),
+            "vertices": mesh.positions.len(),
+            "triangles": mesh.triangle_count(),
+            "bytes": bytes.len(),
+            "sha256": digest,
+        }))
+    }
+}
+
+fn format_str(f: worldos_kernel::mesh_import::MeshFormat) -> &'static str {
+    match f {
+        worldos_kernel::mesh_import::MeshFormat::Stl => "stl",
+        worldos_kernel::mesh_import::MeshFormat::Obj => "obj",
+    }
+}
+
+/// Count existing `geom:mesh` objects for deterministic default names.
+fn mesh_seq(ctx: &CommandContext) -> usize {
+    ctx.project
+        .objects
+        .values()
+        .filter(|o| o.type_id.0 == types::MESH)
+        .count()
+        + 1
 }
 
 fn add_vec3(a: &Value, b: &Value) -> Value {

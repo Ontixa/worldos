@@ -20,6 +20,7 @@ pub mod ids;
 pub mod known;
 pub mod measure;
 pub mod mesh;
+pub mod mesh_import;
 pub mod model;
 pub mod project;
 pub mod requirement;

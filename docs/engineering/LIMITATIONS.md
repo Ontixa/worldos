@@ -48,6 +48,16 @@ Brutally honest current-state constraints. Updated when reality changes.
   use `cad.export_stl`. Exported files are external effects outside
   undo; the attributed command record (with content digest) is the
   audit trail.
+- **Mesh import is triangles, not topology.** `geometry.import` reads
+  binary STL and Wavefront OBJ into a `geom:mesh` component
+  (`positions`/`indices`, vertex-welded for STL). There is no healing,
+  manifold repair, or B-rep reconstruction: open meshes measure ~0
+  volume by the divergence theorem, inverted winding yields |volume|,
+  and holes stay holes. The mesh is stored inline in the project file,
+  so imports are bounded to 100k triangles / 64 MiB sources; huge
+  scans need the artifact store + `cad:body` path instead. ASCII STL,
+  facet normals, UVs, and OBJ materials are ignored — winding order is
+  preserved as authored.
 
 ## Agent
 

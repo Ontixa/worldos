@@ -9,7 +9,7 @@ Only demonstrably working behavior is listed here. Verified on
 - **UPG kernel** — objects, schema-versioned components, typed relations,
   actors, permission sets, `core:contains` containment, `core:depends-on`
   dependency tracking, search.
-- **Commands** — 24 builtin handlers (object/relation/document/code/
+- **Commands** — 25 builtin handlers (object/relation/document/code/
   geometry/meta/requirement/decision). Schema-validated, permission-checked,
   composable via `ctx.run_sub`.
 - **Transactions** — atomic commit/rollback of `StateOp` groups; linear
@@ -21,14 +21,19 @@ Only demonstrably working behavior is listed here. Verified on
 - **Requirement staleness** — a write to a depended-on object flips
   dependent `core:requirement` status to `stale` in the same transaction.
 - **Requirement expressions** — `and`/`or`/`not`/parens grammar; measure
-  terms `volume(x)`, `area(x)`, `distance(a,b)` over analytic primitives.
+  terms `volume(x)`, `area(x)`, `distance(a,b)` over analytic primitives
+  and imported `geom:mesh` objects.
 - **Geometry (analytic)** — `geometry.create_primitive` for
   cube/sphere/cylinder/cone/torus/plane; `geometry.transform`;
   `geometry.measure` capability (bbox, volume, surface area);
   `geometry.export` command + capability — deterministic tessellation
   (`kernel::mesh`) to binary STL / OBJ files, `..`-guarded,
-  never-overwrite, `filesystem.write`-gated. These are
-  **analytic approximations from component data — not a B-rep kernel.**
+  never-overwrite, `filesystem.write`-gated; `geometry.import`
+  command + capability — binary STL / OBJ → `geom:mesh` objects
+  (`kernel::mesh_import`, vertex-welded, ≤100k triangles, ≤64 MiB,
+  `filesystem.read`-gated), measurable and re-exportable. Primitives are
+  **analytic approximations from component data — not a B-rep kernel**;
+  imported meshes are triangles, not topology.
 - **Capabilities** — registry + permission guard + `CapabilityHost`;
   `plugin.run` exposes hosted plugins.
 - **Plugin runtime** — hosted `worldos-plugin-*` subprocesses speaking

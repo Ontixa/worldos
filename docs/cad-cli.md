@@ -50,6 +50,30 @@ file directly: it requires the `artifact.export` + `filesystem.write`
 permissions, rejects `..` path segments, and never overwrites an existing file.
 B-rep `cad:body` objects are refused there with a pointer to this workflow.
 
+`geometry.import` is the inverse: it parses a binary STL or Wavefront OBJ file
+(format inferred from the extension, or forced via `format`) into a new
+`geom:mesh` object whose `geom:mesh` component stores the indexed triangles
+plus source provenance (path, sha256, byte count). It requires `artifact.import`
++ `filesystem.read`, rejects `..` segments, fails closed on truncated or ASCII
+STL, and rolls back cleanly on any error. The imported mesh is real geometry:
+`geometry.measure`, `volume()`/`area()` requirement terms, transforms, and
+`geometry.export` (which reproduces `worldos`-written files byte-identically)
+all work on it. Imports are capped at 100k triangles and 64 MiB; ASCII STL,
+vertex normals, and OBJ materials are ignored. Example batch:
+
+```json
+[
+  {"type":"geometry.create_primitive","input":{"kind":"cylinder","name":"cyl","size":[2,2,5]}},
+  {"type":"geometry.export","input":{"object":"cyl","path":"cyl.stl"}},
+  {"type":"geometry.import","input":{"path":"cyl.stl","name":"cyl-rt"}},
+  {"type":"geometry.export","input":{"object":"cyl-rt","path":"cyl-rt.stl"}}
+]
+```
+
+`cyl-rt.stl` comes back byte-identical to `cyl.stl`; `geometry.measure` on
+`cyl-rt` reports the tessellated mesh's volume/area (~1–2% under the analytic
+primitive for curved kinds — the inscribed-polygon approximation).
+
 ### Copy the STEP artifact to a file
 
 Copy the `step` reference from the export result (the final result in the box

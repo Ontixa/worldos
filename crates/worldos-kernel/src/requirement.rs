@@ -14,8 +14,8 @@
 //!              | "exists_named(" name ")"      — object with name exists
 //!              | "count(" type ")"             — cardinality of a type
 //!              | "object(" name ")." comp "." path — numeric field access
-//!              | "volume(" name ")"            — analytic volume
-//!              | "area(" name ")"              — analytic surface area
+//!              | "volume(" name ")"            — analytic or mesh volume
+//!              | "area(" name ")"              — analytic or mesh area
 //!              | "distance(" name "," name ")" — position distance
 //! ```
 //!
@@ -281,17 +281,15 @@ fn eval_term(
     }
     if let Some(args) = call_args(term, "volume") {
         let obj = find_named(project, unquote(args), refs)?;
-        let dims = crate::measure::object_dims(obj)
-            .ok_or_else(|| KernelError::InvalidInput("no geometry".into()))?;
-        let kind = crate::measure::object_kind(obj).unwrap_or("");
-        return Ok(crate::measure::measure_primitive(kind, dims).0);
+        return Ok(crate::measure::object_measures(obj)
+            .ok_or_else(|| KernelError::InvalidInput("no geometry".into()))?
+            .0);
     }
     if let Some(args) = call_args(term, "area") {
         let obj = find_named(project, unquote(args), refs)?;
-        let dims = crate::measure::object_dims(obj)
-            .ok_or_else(|| KernelError::InvalidInput("no geometry".into()))?;
-        let kind = crate::measure::object_kind(obj).unwrap_or("");
-        return Ok(crate::measure::measure_primitive(kind, dims).1);
+        return Ok(crate::measure::object_measures(obj)
+            .ok_or_else(|| KernelError::InvalidInput("no geometry".into()))?
+            .1);
     }
     if let Some(args) = call_args(term, "distance") {
         let (a, b) = args

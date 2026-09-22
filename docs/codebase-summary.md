@@ -16,11 +16,15 @@ The domain-free semantic core.
   parens grammar, `exists*`/`count`/`object()`/`volume`/`area`/`distance`
   terms, dependency tracing (returns referenced objects)
 - `measure.rs` — analytic geometry measures (dims, bbox, volume, area,
-  distance) shared by the `geometry.measure` capability and requirement
-  terms
+  distance) plus stored-mesh measures for `geom:mesh` objects, shared by
+  the `geometry.measure` capability and requirement terms
 - `mesh.rs` — deterministic tessellation of the `geom:*` primitives
   (indexed triangle mesh, fixed segment counts) + binary STL / OBJ
-  writers; backs the `geometry.export` command
+  writers + `geom:mesh` component (de)serialization; backs
+  `geometry.export`/`geometry.import`
+- `mesh_import.rs` — hand-rolled binary STL (vertex-welded) and
+  Wavefront OBJ (slash indices, relative refs, polygon fan) parsers with
+  size/triangle caps; backs the `geometry.import` command
 - `validation.rs` — `Validator` trait, `ValidationReport`, diagnostics
 - `search.rs` — `SearchQuery` (text/type/tag/component)
 - `events.rs` — `EngineEvent` (object/txn/project signals)
@@ -40,7 +44,10 @@ The domain-free semantic core.
 - `store.rs` — `ProjectStore` trait + `MemoryStore`
 - `snapshot.rs` — serializable whole-graph snapshot
 - `sqlite.rs` — `SqliteStore`: WAL, atomic writes, `user_version`
-  migrations, history persistence
+  migrations, history persistence. Component/history JSON round-trips
+  through serde_json's `float_roundtrip` feature (pinned workspace-wide)
+  so f64 data is exact across save/load — serde_json's default parser
+  can be 1 ULP off.
 - `tests/roundtrip.rs` — save/reopen, missing file, interrupted save
 
 ## crates/worldos-capability
@@ -49,8 +56,8 @@ The domain-free semantic core.
 - `registry.rs` — registration + permission-checked dispatch
 - `host.rs` — `CapabilityHost` bridge (run commands, txn control,
   schemas, validation, object resolution, project path)
-- `builtin.rs` — inspect/search/validate/export/measure/mesh-export
-  capabilities
+- `builtin.rs` — inspect/search/validate/export/measure/mesh-export/
+  mesh-import capabilities
 - `plugin.rs` — hosted plugin runtime: `worldos-plugin-*` subprocesses
   speaking line-delimited JSON-RPC over stdio; `plugin.run` capability,
   discovery, interpreter dispatch, timeout, commit/rollback, sidecar
