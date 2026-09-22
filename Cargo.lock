@@ -2075,6 +2075,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "ulid",
+ "worldos-adapter-cadrum",
  "worldos-agent",
  "worldos-capability",
  "worldos-commands",

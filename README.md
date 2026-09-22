@@ -21,17 +21,30 @@ Intent → Requirements → Universal Project Graph
 - **Governed mutations** — all changes are commands: schema-validated,
   permission-checked, grouped into atomic transactions, journaled into
   an append-only history, and undoable/redoable.
-- **`.worldos` files** — a single SQLite database per project: objects,
-  relations, and full history in one portable file.
+- **`.worldos` files** — a SQLite database per project: objects,
+  relations, and full history. Native CAD outputs additionally use a sibling
+  `.worldos.artifacts` directory; keep both together.
 - **Agent runtime** — a planner executes real commands through the
   capability layer (never raw mutation), inside one transaction,
-  attributed to its own actor, then verifies its work.
+  attributed to its own actor. Reported object/relation references are
+  checked before commit; invalid or missing references fail the run and
+  trigger rollback. This presence check does not prove semantic goal
+  completion (see `docs/engineering/LIMITATIONS.md`).
 - **Interfaces, one engine** — CLI, JSON-RPC (stdio + WebSocket), MCP
   server for AI tools, TypeScript/Python SDKs, and a Tauri desktop
   workspace (graph, inspector, history, 3D viewport, command palette,
   agent panel) all drive the same `Engine`.
 
 ## Quickstart
+
+Native B-rep CAD is a separate opt-in CLI build and session flag; the default
+CLI keeps the native OCCT dependency disabled. See the [CAD CLI workflow](docs/cad-cli.md)
+for `--features cad`, `--cad`, artifact handling and limitations. This does not
+enable CAD in the desktop app.
+
+After generating a STEP artifact, use `worldos artifact export <project> <reference> <new-file.step>`
+to copy verified bytes into a file for another CAD tool, without loading the CAD kernel.
+See the [copy limits and trusted-operator contract](docs/cad-cli.md#copy-the-step-artifact-to-a-file).
 
 ```bash
 cargo build -p worldos-cli          # produces the `worldos` binary

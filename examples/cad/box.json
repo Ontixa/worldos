@@ -1,0 +1,5 @@
+[
+  {"type":"cad.create_box","input":{"name":"block","size_mm":[50,40,20]}},
+  {"type":"cad.measure","input":{"object":"block"}},
+  {"type":"cad.export_step","input":{"object":"block"}}
+]

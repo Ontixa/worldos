@@ -14,7 +14,10 @@
     "dev:desktop": "cargo tauri dev",
     "sdk:build": "npm run build -w @worldos/sdk"
   },
+  "overrides": {
+    "vite": "^6.4.3"
+  },
   "engines": {
-    "node": ">=20"
+    "node": "^20.0.0 || ^22.0.0 || >=24.0.0"
   }
 }

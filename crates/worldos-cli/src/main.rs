@@ -19,6 +19,9 @@ struct Cli {
     /// Emit machine-readable JSON.
     #[arg(long, global = true)]
     json: bool,
+    /// Attach the native CAD kernel (requires a build with --features cad).
+    #[arg(long, global = true)]
+    cad: bool,
     #[command(subcommand)]
     cmd: Cmd,
 }
@@ -90,6 +93,11 @@ enum Cmd {
     },
     /// Export the project model to JSON.
     Export { file: PathBuf, out: PathBuf },
+    /// Copy a verified artifact to a new file (trusted local operator; no CAD needed).
+    Artifact {
+        #[command(subcommand)]
+        sub: ArtifactCmd,
+    },
     /// Start the MCP server (stdio) bound to a project.
     Mcp { file: PathBuf },
     /// Raw JSON-RPC stdio endpoint bound to a project (used by SDKs).
@@ -121,6 +129,16 @@ enum Cmd {
 }
 
 #[derive(Subcommand)]
+enum ArtifactCmd {
+    /// Export an existing sidecar blob without overwriting any destination.
+    Export {
+        file: PathBuf,
+        reference: String,
+        out: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
 enum PluginCmd {
     /// Discover `worldos-plugin-*` executables in plugin dirs.
     List {
@@ -143,7 +161,7 @@ enum PluginCmd {
 fn main() {
     let cli = Cli::parse();
     init_tracing();
-    let code = match cmd::run(cli.cmd, cli.json) {
+    let code = match cmd::run(cli.cmd, cli.json, cli.cad) {
         Ok(()) => 0,
         Err(e) => {
             if cli.json {

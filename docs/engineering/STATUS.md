@@ -34,7 +34,10 @@ Only demonstrably working behavior is listed here. Verified on
   violation; sidecar `.json` manifest grants exact permissions.
 - **Agent runtime** — plan → act → verify inside one transaction;
   `RulePlanner`, `LlmPlanner` (feature `llm`, OpenAI-compatible BYOK),
-  `FallbackPlanner`; per-run permission profiles.
+  `FallbackPlanner`; per-run permission profiles. Reported object and
+  relation IDs are checked for presence before commit; invalid/missing
+  references fail and trigger rollback, preserving step evidence.
+  This is not semantic goal verification (see `LIMITATIONS.md`).
 - **Interfaces** — CLI (`worldos`), JSON-RPC over stdio + WebSocket, MCP
   server, TypeScript SDK, Python SDK (stdlib-only), Tauri 2 desktop
   (builds; viewport renders analytic primitives).

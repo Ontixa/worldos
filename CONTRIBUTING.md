@@ -3,10 +3,18 @@
 ## Setup
 
 - Rust: `cargo build --workspace` (Windows host triples `x86_64-pc-windows-gnu` and `-msvc` both work)
-- Node ≥ 20 for the TS SDK and desktop frontend: `npm install`
+- Node 20.x, 22.x, or >=24 for repository development (CI uses Node 22): `npm ci`
 - Python ≥ 3.10 for the Python SDK (no deps)
 
 Windows helper scripts (PowerShell 5.1+):
+
+The Node range is the development-tooling intersection, not a new runtime
+requirement for consumers of the published SDK. Bootstrap/doctor report tool
+presence and versions; they do not enforce this Node version range.
+
+The root Vite override keeps desktop and SDK tests on the same patched Vite 6
+baseline, compatible with their current peer requirements. It prevents a broad
+transitive range from selecting a different major; it is not an audit exception.
 
 ```powershell
 pwsh scripts/bootstrap.ps1   # check prerequisites, optionally -Install via winget
@@ -23,10 +31,18 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 npm run typecheck --workspaces --if-present
+npm run test -w @worldos/sdk
 python -m py_compile sdks/worldos-py/worldos.py
 ```
 
 (or just `pwsh scripts/check.ps1` and `pwsh scripts/test.ps1`)
+
+Selecting the SDK suite requires installed workspace dependencies and a real
+Python executable; missing prerequisites fail with setup guidance rather than
+reporting skipped work as passed. On Windows, run
+`node --test scripts/tests/selected-suites.test.mjs` for the dependency-free
+helper regression. It uses copied scripts and controlled command stubs, retains
+its temporary evidence, and invokes no real Cargo, npm, or Python commands.
 
 Desktop: `cd apps/desktop && npm run build && cd src-tauri && cargo check`
 

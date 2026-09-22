@@ -11,8 +11,10 @@
 
 pub mod digest;
 pub mod error;
+pub mod reader;
 pub mod store;
 
 pub use digest::ArtifactRef;
 pub use error::ArtifactError;
+pub use reader::{ArtifactReadError, ArtifactReader, MAX_EXPORT_BYTES};
 pub use store::{ArtifactStore, GcReport, PutOutcome};

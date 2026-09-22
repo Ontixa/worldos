@@ -69,3 +69,11 @@ graph stores digests and derived measures only.
 - Shape handles/edge ids are kernel-internal; semantic selectors
   (`faces_normal_to`, `edges_adjacent_to`, …) must be re-resolved
   after every regeneration — topology ids are not a stable API.
+
+## CLI exposure
+
+The CLI keeps the native adapter behind the optional `cad` Cargo feature and
+requires an explicit per-session `--cad` flag before attaching it to the existing
+Engine. Default CLI builds remain free of OCCT linkage; workspace tests/other
+consumers are a separate build scope. No component schema or command semantics
+change, and desktop attachment is not implied. See [CAD CLI workflow](../cad-cli.md).
