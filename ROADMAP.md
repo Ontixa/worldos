@@ -25,8 +25,11 @@ Domain lenses on the same kernel. Ordered by leverage:
 1. **Geometry depth** — ✅ `geometry.measure` capability (bbox, volume,
    surface area) + `volume()`/`area()`/`distance()` requirement terms over
    shared `kernel::measure`; six primitives incl. `cone`/`torus`.
+   ✅ `geometry.export` command + capability: deterministic mesh export of
+   `geom:*` primitives to binary STL / OBJ files (`kernel::mesh`
+   tessellation; `cad:body` stays on `cad.export_stl`).
    Next: parametric sketches/constraints, B-rep boundary (OCCT eval),
-   mesh import/export
+   mesh import
 2. **Real agent intelligence** — ✅ `LlmPlanner` over `ModelProvider`
    (OpenAI-compatible BYOK via `WORLDOS_LLM_*`), self-repair reprompt,
    `FallbackPlanner` chain to rules, unknown-command validation, and

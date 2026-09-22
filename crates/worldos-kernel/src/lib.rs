@@ -19,6 +19,7 @@ pub mod events;
 pub mod ids;
 pub mod known;
 pub mod measure;
+pub mod mesh;
 pub mod model;
 pub mod project;
 pub mod requirement;

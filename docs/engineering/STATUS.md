@@ -9,7 +9,7 @@ Only demonstrably working behavior is listed here. Verified on
 - **UPG kernel** — objects, schema-versioned components, typed relations,
   actors, permission sets, `core:contains` containment, `core:depends-on`
   dependency tracking, search.
-- **Commands** — 23 builtin handlers (object/relation/document/code/
+- **Commands** — 24 builtin handlers (object/relation/document/code/
   geometry/meta/requirement/decision). Schema-validated, permission-checked,
   composable via `ctx.run_sub`.
 - **Transactions** — atomic commit/rollback of `StateOp` groups; linear
@@ -24,7 +24,10 @@ Only demonstrably working behavior is listed here. Verified on
   terms `volume(x)`, `area(x)`, `distance(a,b)` over analytic primitives.
 - **Geometry (analytic)** — `geometry.create_primitive` for
   cube/sphere/cylinder/cone/torus/plane; `geometry.transform`;
-  `geometry.measure` capability (bbox, volume, surface area). These are
+  `geometry.measure` capability (bbox, volume, surface area);
+  `geometry.export` command + capability — deterministic tessellation
+  (`kernel::mesh`) to binary STL / OBJ files, `..`-guarded,
+  never-overwrite, `filesystem.write`-gated. These are
   **analytic approximations from component data — not a B-rep kernel.**
 - **Capabilities** — registry + permission guard + `CapabilityHost`;
   `plugin.run` exposes hosted plugins.
