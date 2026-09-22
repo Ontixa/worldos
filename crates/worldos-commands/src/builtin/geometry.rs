@@ -8,7 +8,9 @@ use crate::error::CommandError;
 use crate::handler::{CommandContext, CommandHandler};
 use crate::schema::{CommandSchema, props};
 use serde_json::{Value, json};
-use worldos_kernel::known::{components, types};
+use std::io::Write;
+use worldos_kernel::actor::Permission;
+use worldos_kernel::known::{components, permissions, types};
 
 pub struct GeometryCreatePrimitive;
 
@@ -151,6 +153,129 @@ impl CommandHandler for GeometryTransform {
             .and_then(|o| o.component_data(components::TRANSFORM))
             .cloned();
         Ok(json!({"id": id.to_string(), "transform": t}))
+    }
+}
+
+/// `geometry.export` — tessellate a `geom:*` object's analytic geometry
+/// and write an external mesh file (binary STL by default, OBJ text).
+///
+/// The output file is an external effect, not graph state: the
+/// transaction journal records this command (attributed, with the
+/// content digest in the output), but undo does not remove the file —
+/// same contract as `worldos artifact export`. Containment mirrors the
+/// rest of the file-facing surface: `..` segments are refused, existing
+/// files are never overwritten (`create_new`), and the actor needs
+/// `filesystem.write` on top of the schema's `artifact.export` — the
+/// default agent/plugin grants do not include it.
+///
+/// `cad:body` objects are B-reps: export them via `cad.export_stl` +
+/// `worldos artifact export` instead.
+pub struct GeometryExport;
+
+impl CommandHandler for GeometryExport {
+    fn schema(&self) -> CommandSchema {
+        CommandSchema::write(
+            "geometry.export",
+            "geometry",
+            "Tessellate a primitive and write a mesh file (stl = binary STL, obj = Wavefront); never overwrites",
+            props::object(
+                &["path"],
+                json!({
+                    "id": {"type": "string"}, "name": {"type": "string"},
+                    "object": {"type": "string", "description": "id or name"},
+                    "path": {"type": "string", "description": "destination file — `..` rejected, existing files never overwritten"},
+                    "format": {"type": "string", "enum": ["stl", "obj"], "description": "default: stl"}
+                }),
+            ),
+        )
+        .permission(permissions::ARTIFACT_EXPORT)
+    }
+
+    fn execute(&self, ctx: &mut CommandContext, input: &Value) -> Result<Value, CommandError> {
+        // Deny before touching the filesystem — cad.import_step uses the
+        // same in-handler pattern for filesystem.read.
+        if !ctx
+            .actor
+            .permissions
+            .is_allowed(&Permission(permissions::FILESYSTEM_WRITE.into()))
+        {
+            return Err(CommandError::PermissionDenied {
+                command: "geometry.export".into(),
+                perm: permissions::FILESYSTEM_WRITE.into(),
+            });
+        }
+        let path = input["path"]
+            .as_str()
+            .ok_or_else(|| CommandError::Failed("missing `path`".into()))?;
+        if path.is_empty() {
+            return Err(CommandError::Failed("empty `path`".into()));
+        }
+        // same traversal guard as the artifact.export capability
+        if path.split(['/', '\\']).any(|seg| seg == "..") {
+            return Err(CommandError::Failed(
+                "path traversal (`..`) is not allowed".into(),
+            ));
+        }
+        let format = input
+            .get("format")
+            .and_then(|f| f.as_str())
+            .unwrap_or("stl");
+
+        // `object` accepts id-or-name (cad.* convention); id/name work too.
+        let lookup = match input.get("object").and_then(|v| v.as_str()) {
+            Some(t) if t.parse::<worldos_kernel::ids::ObjectId>().is_ok() => json!({"id": t}),
+            Some(t) => json!({"name": t}),
+            None => input.clone(),
+        };
+        let id = super::object::resolve_object(ctx, &lookup)?;
+        let obj = ctx
+            .project
+            .get(id)
+            .ok_or_else(|| CommandError::Failed("object vanished mid-command".into()))?;
+        if obj.type_id.0 == types::CAD_BODY {
+            return Err(CommandError::Failed(
+                "cad:body is a B-rep — use cad.export_stl + `worldos artifact export`".into(),
+            ));
+        }
+        let mesh = worldos_kernel::mesh::object_mesh(obj).map_err(CommandError::Kernel)?;
+        let bytes = match format {
+            "stl" => worldos_kernel::mesh::to_binary_stl(&mesh),
+            "obj" => worldos_kernel::mesh::to_obj(&mesh),
+            other => {
+                return Err(CommandError::Failed(format!("unknown format `{other}`")));
+            }
+        };
+
+        // Verified bytes -> new file only. A mid-write failure keeps the
+        // created path (may be partial), named in the error — the same
+        // retained-partial contract as Engine::export_project_artifact.
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+            .map_err(|e| {
+                CommandError::Failed(format!(
+                    "cannot create `{path}` (existing files are never overwritten): {e}"
+                ))
+            })?;
+        file.write_all(&bytes)
+            .and_then(|()| file.sync_all())
+            .map_err(|e| {
+                CommandError::Failed(format!(
+                    "write `{path}` failed: {e}; created file retained and may be partial"
+                ))
+            })?;
+
+        let digest = worldos_artifact::ArtifactRef::of(&bytes).to_string();
+        Ok(json!({
+            "id": id.to_string(),
+            "name": obj.name,
+            "path": path,
+            "format": format,
+            "triangles": mesh.triangle_count(),
+            "bytes": bytes.len(),
+            "sha256": digest,
+        }))
     }
 }
 

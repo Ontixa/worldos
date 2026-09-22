@@ -39,6 +39,15 @@ Brutally honest current-state constraints. Updated when reality changes.
 - **Rotation ignored by measure.** `object_dims` applies scale but not
   rotation — bbox/volume are correct for volume (rotation-invariant)
   but `object_bbox` is wrong for rotated objects.
+- **Mesh export is a faceted approximation.** `geometry.export`
+  tessellates the analytic primitives with fixed segment counts
+  (`kernel::mesh`): spheres/cylinders/cones/tori come out as inscribed
+  polygonal solids (~1–3% under analytic volume), `plane` exports an
+  open two-triangle surface, and rotation is not applied (same caveat
+  as `object_bbox`). `cad:body` B-rep fidelity is out of scope here —
+  use `cad.export_stl`. Exported files are external effects outside
+  undo; the attributed command record (with content digest) is the
+  audit trail.
 
 ## Agent
 

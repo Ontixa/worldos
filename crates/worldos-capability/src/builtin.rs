@@ -190,6 +190,40 @@ impl Capability for GeometryMeasure {
     }
 }
 
+// ---------------------------------------------------------------- mesh export
+
+/// `geometry.export` — governed wrapper over the same-named command so
+/// agents/MCP/SDK callers reach mesh export through the capability
+/// registry. Not deterministic: it writes to the filesystem.
+pub struct GeometryExport;
+
+impl Capability for GeometryExport {
+    fn descriptor(&self) -> CapabilityDescriptor {
+        CapabilityDescriptor::new(
+            "geometry.export",
+            "Export an object's mesh to an external file (stl/obj); never overwrites",
+            json!({
+                "type": "object",
+                "required": ["path"],
+                "properties": {
+                    "id": {"type": "string"}, "name": {"type": "string"},
+                    "object": {"type": "string"},
+                    "path": {"type": "string"},
+                    "format": {"type": "string", "enum": ["stl", "obj"]}
+                }
+            }),
+        )
+        .requires(&[permissions::ARTIFACT_EXPORT, permissions::FILESYSTEM_WRITE])
+    }
+    fn execute(
+        &self,
+        host: &mut dyn CapabilityHost,
+        input: &Value,
+    ) -> Result<Value, CapabilityError> {
+        host.run_command("geometry.export", input.clone())
+    }
+}
+
 /// All builtin capabilities.
 pub fn builtins() -> Vec<std::sync::Arc<dyn Capability>> {
     vec![
@@ -198,5 +232,6 @@ pub fn builtins() -> Vec<std::sync::Arc<dyn Capability>> {
         std::sync::Arc::new(ValidationRun),
         std::sync::Arc::new(ArtifactExport),
         std::sync::Arc::new(GeometryMeasure),
+        std::sync::Arc::new(GeometryExport),
     ]
 }

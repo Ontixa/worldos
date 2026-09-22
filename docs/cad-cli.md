@@ -43,6 +43,13 @@ or a filesystem path in `file` (requiring the actor's `filesystem.read`
 permission). Use `worldos --cad commands <project> --json` for the exact current
 schemas. General `worldos export` remains a project-JSON export, not STEP export.
 
+`cad.export_stl` works the same way (STL bytes land in the sidecar; copy them
+out with `artifact export`). For analytic `geom:*` primitives — which need no
+CAD feature or `--cad` flag — `geometry.export` writes a binary STL (or OBJ)
+file directly: it requires the `artifact.export` + `filesystem.write`
+permissions, rejects `..` path segments, and never overwrites an existing file.
+B-rep `cad:body` objects are refused there with a pointer to this workflow.
+
 ### Copy the STEP artifact to a file
 
 Copy the `step` reference from the export result (the final result in the box

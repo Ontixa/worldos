@@ -18,6 +18,9 @@ The domain-free semantic core.
 - `measure.rs` — analytic geometry measures (dims, bbox, volume, area,
   distance) shared by the `geometry.measure` capability and requirement
   terms
+- `mesh.rs` — deterministic tessellation of the `geom:*` primitives
+  (indexed triangle mesh, fixed segment counts) + binary STL / OBJ
+  writers; backs the `geometry.export` command
 - `validation.rs` — `Validator` trait, `ValidationReport`, diagnostics
 - `search.rs` — `SearchQuery` (text/type/tag/component)
 - `events.rs` — `EngineEvent` (object/txn/project signals)
@@ -46,7 +49,8 @@ The domain-free semantic core.
 - `registry.rs` — registration + permission-checked dispatch
 - `host.rs` — `CapabilityHost` bridge (run commands, txn control,
   schemas, validation, object resolution, project path)
-- `builtin.rs` — inspect/search/validate/export/measure capabilities
+- `builtin.rs` — inspect/search/validate/export/measure/mesh-export
+  capabilities
 - `plugin.rs` — hosted plugin runtime: `worldos-plugin-*` subprocesses
   speaking line-delimited JSON-RPC over stdio; `plugin.run` capability,
   discovery, interpreter dispatch, timeout, commit/rollback, sidecar

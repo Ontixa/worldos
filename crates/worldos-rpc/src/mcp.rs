@@ -56,6 +56,10 @@ fn tools() -> Vec<Value> {
                "inputSchema": obj(&["goal"], json!({"goal": {"type":"string"}, "agent": {"type":"string"}}))}),
         json!({"name": "geometry_measure", "description": "Bounding box, volume, surface area of an object",
                "inputSchema": obj(&[], json!({"id": {"type":"string"}, "name": {"type":"string"}}))}),
+        json!({"name": "geometry_export", "description": "Export an object's mesh to a file (stl/obj); needs filesystem.write",
+               "inputSchema": obj(&["path"], json!({"id": {"type":"string"}, "name": {"type":"string"},
+                    "object": {"type":"string"}, "path": {"type":"string"},
+                    "format": {"type":"string", "enum": ["stl","obj"]}}))}),
         json!({"name": "plugin_run", "description": "Run a hosted worldos-plugin-* executable in one transaction",
                "inputSchema": obj(&["plugin"], json!({"plugin": {"type":"string"},
                     "args": {"type":"array", "items": {"type":"string"}}}))}),
@@ -98,6 +102,10 @@ fn tool_call(service: &RpcService, name: &str, args: &Value) -> Result<Value, St
         "geometry_measure" => (
             "capability.execute",
             json!({"id": "geometry.measure", "input": args}),
+        ),
+        "geometry_export" => (
+            "capability.execute",
+            json!({"id": "geometry.export", "input": args}),
         ),
         "plugin_run" => (
             "capability.execute",
