@@ -11,7 +11,9 @@ pub mod report;
 pub mod runtime;
 
 pub use capability::AgentRun;
-pub use planner::{FallbackPlanner, LlmPlanner, PlanError, PlannedStep, Planner, RulePlanner};
+pub use planner::{
+    FallbackPlanner, LlmPlanner, Observation, PlanError, PlannedStep, Planner, RulePlanner,
+};
 pub use provider::{EchoProvider, ModelProvider, ProviderConfig, ProviderError};
 pub use report::{AgentReport, RunStatus, StepRecord};
-pub use runtime::{AgentRuntime, Budget};
+pub use runtime::{AgentRuntime, Budget, RunSpec};

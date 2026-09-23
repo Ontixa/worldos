@@ -304,9 +304,26 @@ pub fn run(cmd: Cmd, json_out: bool, cad: bool) -> Result<(), Box<dyn std::error
                 }
             });
         }
-        Cmd::Agent { file, goal, agent } => {
+        Cmd::Agent {
+            file,
+            goal,
+            agent,
+            done_when,
+            max_iterations,
+            max_commands,
+        } => {
             let mut e = open(&file)?;
-            let report = e.run_capability("agent.run", json!({"goal": goal, "agent": agent}))?;
+            let mut input = json!({"goal": goal, "agent": agent});
+            if let Some(expr) = done_when {
+                input["done_when"] = json!(expr);
+            }
+            if let Some(n) = max_iterations {
+                input["max_iterations"] = json!(n);
+            }
+            if let Some(n) = max_commands {
+                input["max_commands"] = json!(n);
+            }
+            let report = e.run_capability("agent.run", input)?;
             e.save()?;
             print(json_out, &report, |r| {
                 out::header("Agent run");

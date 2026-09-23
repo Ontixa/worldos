@@ -61,18 +61,34 @@ Brutally honest current-state constraints. Updated when reality changes.
 
 ## Agent
 
-- **Plan-act-verify, not tool-use loop.** The agent executes a
-  pre-planned command list in one transaction; it does not yet
-  observe → act → inspect → re-plan iteratively.
-- **No deterministic goal verifier.** Verification checks that
-  top-level output `id` references still exist before committing, not
-  that the user's objective is semantically true. `relation.add`
-  references are checked as relations; other `id` outputs are checked
-  as objects. Malformed or absent references fail the run and trigger
-  rollback, retaining command outputs in the failure report. Plans that
-  return a reference and delete it later in the same run also fail this
-  final-state check. Commands without an `id` output have no reference
-  check; this is not full postcondition or goal verification.
+- **Goal verification needs a declared predicate.** The tool-use loop
+  (`AgentRuntime::run_spec`) iterates observe → plan → act → inspect
+  until `done_when` — an expression in the requirement grammar —
+  verifies true on live in-transaction state, or fails honestly and
+  rolls back. Natural-language goals do NOT auto-derive a predicate:
+  `RulePlanner` cannot synthesize one and the LLM planner only *proposes
+  steps* — a caller that omits `done_when` gets the legacy single-pass
+  semantics where success means "the plan executed and references check
+  out", not that the objective is semantically true.
+- **Predicate expressiveness is the requirement grammar's.** `exists`,
+  `exists_named`, `count`, `volume`, `area`, `distance`,
+  `object(name).component.path` + boolean connectives/comparisons —
+  enough for presence/cardinality/measure goals; not arbitrary
+  postconditions (no relation-shape queries, no negated-existence edge
+  cases beyond `not exists_named`). An unevaluable expression (bad term,
+  missing object in a measure term) reads as "unsatisfied" each round —
+  the run fails at the iteration cap or a planner dead-end with the
+  last verdict in the report.
+- **Reference checks are presence checks.** Every top-level output `id`
+  must still exist after its iteration and at commit; `relation.add`
+  outputs are checked as relations. Malformed or absent references fail
+  the run and trigger rollback, retaining command outputs in the failure
+  report. Commands without an `id` output have no reference check; this
+  is not full postcondition verification.
+- **Stateless planners can churn.** `RulePlanner` replans the same goal
+  each iteration, so an unsatisfiable `done_when` burns commands until
+  `max_iterations`/`max_commands` trip — bounded, honest, but not smart.
+  Only `LlmPlanner` currently uses the between-iteration observation.
 - **LLM planner is BYOK-only** (`WORLDOS_LLM_*`); no bundled provider.
 
 ## Scale & platform

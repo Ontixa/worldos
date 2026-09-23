@@ -90,6 +90,17 @@ enum Cmd {
         goal: String,
         #[arg(long, default_value = "assistant")]
         agent: String,
+        /// Success predicate (requirement-expression grammar, e.g.
+        /// `exists_named("housing")`): the agent iterates until it
+        /// verifies true on live state, else fails honestly.
+        #[arg(long = "done-when")]
+        done_when: Option<String>,
+        /// Max observe→act→inspect iterations before the run fails.
+        #[arg(long)]
+        max_iterations: Option<usize>,
+        /// Max planner-proposed commands per run.
+        #[arg(long)]
+        max_commands: Option<usize>,
     },
     /// Export the project model to JSON.
     Export { file: PathBuf, out: PathBuf },

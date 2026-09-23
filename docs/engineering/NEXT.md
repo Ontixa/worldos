@@ -23,9 +23,16 @@ the next ~5 items, not the backlog.
 5. ~~**WorldBench v0**~~ — done: `worldos-bench` crate + `bench/tasks/`
    (6 tasks) + `bench/reports/v0-baseline.json` (6/6 pass); wired into
    `scripts/bench.ps1`. Remaining: richer check kinds, corpus growth.
-6. **Agent tool-use loop** — bounded observe→act→inspect→replan with
-   iteration caps and deterministic goal verification (separate from
-   "commands ran").
+6. ~~**Agent tool-use loop**~~ — done: `AgentRuntime::run_spec` runs a
+   bounded observe→plan→act→inspect loop in one transaction. A declared
+   `done_when` predicate (requirement-expression grammar) is the only
+   success exit — verified on live state each iteration; `Budget`
+   (`max_iterations`/`max_commands`, per-run or per-call), `Planner::
+   plan_turn` observation seam (`Observation`: prior steps, last verdict,
+   remaining budget). Failures roll back with step evidence. Exposed on
+   `agent.run` (`done_when`/`max_iterations`/`max_commands`) and CLI
+   `--done-when`. Remaining: natural-language goals still need a caller-
+   supplied predicate — RulePlanner cannot synthesize one.
 7. **Adversarial hardening** — property tests (undo/redo round-trips,
    save/reopen invariants, failed-txn purity), fuzz targets
    (requirement parser, StateOp streams, JSON-RPC, plugin protocol,
