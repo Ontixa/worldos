@@ -37,6 +37,15 @@ pub struct AgentReport {
     pub transaction_id: Option<TransactionId>,
     #[serde(default)]
     pub created_objects: Vec<String>,
+    /// Evidence: per-command reference checks plus the goal-predicate
+    /// verdict when the run declared `done_when`.
     pub verification: Vec<String>,
     pub summary: String,
+    /// Completed observe→plan→act→inspect cycles (0 for read-only goals
+    /// satisfied before any plan, and for runs that failed while planning).
+    #[serde(default)]
+    pub iterations: usize,
+    /// The declared success predicate the loop verified, when any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub done_when: Option<String>,
 }

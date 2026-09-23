@@ -40,12 +40,21 @@ Only demonstrably working behavior is listed here. Verified on
   line-delimited JSON-RPC over stdio; one `plugin:<name>` transaction per
   session; commit on clean exit, rollback on crash/timeout/protocol
   violation; sidecar `.json` manifest grants exact permissions.
-- **Agent runtime** — plan → act → verify inside one transaction;
-  `RulePlanner`, `LlmPlanner` (feature `llm`, OpenAI-compatible BYOK),
-  `FallbackPlanner`; per-run permission profiles. Reported object and
-  relation IDs are checked for presence before commit; invalid/missing
-  references fail and trigger rollback, preserving step evidence.
-  This is not semantic goal verification (see `LIMITATIONS.md`).
+- **Agent runtime** — bounded observe → plan → act → inspect loop inside
+  one transaction (`AgentRuntime::run_spec`): an optional `done_when`
+  predicate in the requirement-expression grammar is evaluated against
+  live state every iteration and is the only success exit; `Budget`
+  caps iterations (default 8) and total commands (default 32), both
+  overridable per run. `Planner::plan_turn` receives an `Observation`
+  (prior step records, last verdict, remaining budget) so planners can
+  replan — `RulePlanner`, `LlmPlanner` (feature `llm`, OpenAI-compatible
+  BYOK; prompt carries the observation), `FallbackPlanner`; per-run
+  permission profiles. Reported object and relation IDs are checked for
+  presence after each iteration and again before commit; invalid/missing
+  references fail and trigger rollback, preserving step evidence. With
+  no `done_when` the run is one bounded plan→act→verify pass — success
+  still means "commands ran and refs check out", not that the goal is
+  semantically true (see `LIMITATIONS.md`).
 - **Interfaces** — CLI (`worldos`), JSON-RPC over stdio + WebSocket, MCP
   server, TypeScript SDK, Python SDK (stdlib-only), Tauri 2 desktop
   (builds; viewport renders analytic primitives).

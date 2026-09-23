@@ -82,6 +82,8 @@ export interface AgentReport {
   created_objects: string[];
   verification: string[];
   summary: string;
+  iterations: number;
+  done_when?: string;
 }
 
 export interface GraphView {

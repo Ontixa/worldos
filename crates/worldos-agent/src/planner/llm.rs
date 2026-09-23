@@ -2,8 +2,13 @@
 //! self-repair once on malformed output, then validate. `FallbackPlanner`
 //! chains planners (LLM → rules) so a misconfigured or offline provider
 //! degrades gracefully instead of failing the run.
+//!
+//! In the tool-use loop (`plan_turn`) the prompt carries the run
+//! observation — prior steps with their outcomes, the goal predicate and
+//! its last verdict — so the model genuinely replans instead of
+//! re-emitting a stale plan.
 
-use super::{PlanError, PlannedStep, Planner, parse_llm_steps};
+use super::{Observation, PlanError, PlannedStep, Planner, parse_llm_steps};
 use serde_json::{Value, json};
 use worldos_capability::CapabilityHost;
 
@@ -26,7 +31,16 @@ impl<P: crate::provider::ModelProvider> LlmPlanner<P> {
 
 impl<P: crate::provider::ModelProvider> Planner for LlmPlanner<P> {
     fn plan(&self, goal: &str, host: &dyn CapabilityHost) -> Result<Vec<PlannedStep>, PlanError> {
-        let prompt = build_prompt(goal, host, None);
+        self.plan_turn(goal, host, &Observation::default())
+    }
+
+    fn plan_turn(
+        &self,
+        goal: &str,
+        host: &dyn CapabilityHost,
+        obs: &Observation<'_>,
+    ) -> Result<Vec<PlannedStep>, PlanError> {
+        let prompt = build_prompt(goal, host, None, obs);
         let text = self
             .provider
             .complete(&prompt)
@@ -35,7 +49,7 @@ impl<P: crate::provider::ModelProvider> Planner for LlmPlanner<P> {
             Ok(steps) => Ok(validate_steps(steps, host)?),
             Err(parse_err) if self.max_repairs > 0 => {
                 // self-repair: feed the error back and ask for corrected JSON
-                let repair_prompt = build_prompt(goal, host, Some(&parse_err.to_string()));
+                let repair_prompt = build_prompt(goal, host, Some(&parse_err.to_string()), obs);
                 let text2 = self
                     .provider
                     .complete(&repair_prompt)
@@ -52,7 +66,12 @@ impl<P: crate::provider::ModelProvider> Planner for LlmPlanner<P> {
     }
 }
 
-fn build_prompt(goal: &str, host: &dyn CapabilityHost, prev_error: Option<&str>) -> String {
+fn build_prompt(
+    goal: &str,
+    host: &dyn CapabilityHost,
+    prev_error: Option<&str>,
+    obs: &Observation<'_>,
+) -> String {
     let schema_list: Vec<Value> = host
         .command_schemas()
         .iter()
@@ -70,6 +89,37 @@ fn build_prompt(goal: &str, host: &dyn CapabilityHost, prev_error: Option<&str>)
         .iter()
         .map(|o| json!({"id": o.id.to_string(), "name": o.name, "type": o.type_id}))
         .collect();
+
+    // Loop context: only present when the run is iterating toward a
+    // declared predicate — the model sees what already happened and why
+    // the last goal check failed, so it plans the NEXT steps.
+    let mut loop_ctx = String::new();
+    if let Some(expr) = obs.goal_expr {
+        loop_ctx.push_str(&format!(
+            "\nSuccess predicate (must verify true on the state above): `{expr}`.\n\
+             Iteration {} of the run; at most {} command(s) remain in budget.\n",
+            obs.iteration + 1,
+            obs.commands_left,
+        ));
+        if !obs.steps.is_empty() {
+            loop_ctx.push_str("\nSteps already executed this run:\n");
+            for s in obs.steps {
+                let outcome = if s.ok {
+                    serde_json::to_string(&s.output).unwrap_or_default()
+                } else {
+                    format!("FAILED: {}", s.error.as_deref().unwrap_or("unknown error"))
+                };
+                loop_ctx.push_str(&format!("- [{}] {} → {}\n", s.index, s.command, outcome));
+            }
+        }
+        if let Some(v) = obs.verdict {
+            loop_ctx.push_str(&format!("Last goal check: {v}\n"));
+        }
+        loop_ctx.push_str(
+            "Propose the NEXT batch of steps; return [] only if nothing else can help.\n",
+        );
+    }
+
     let repair = prev_error
         .map(|e| format!("\n\nYour previous reply was not a valid JSON array of steps: {e}. Reply with ONLY the corrected JSON array."))
         .unwrap_or_default();
@@ -77,7 +127,7 @@ fn build_prompt(goal: &str, host: &dyn CapabilityHost, prev_error: Option<&str>)
         "You are a WorldOS agent. Produce a JSON array of steps to achieve the goal.\n\
          Each step: {{\"command\": <command>, \"input\": <object>, \"note\": <short>}}.\n\
          Refer to earlier outputs as \"$<index>.<field>\".\n\
-         Available commands:\n{}\n\nCurrent objects:\n{}\n\nGoal: {goal}\n\
+         Available commands:\n{}\n\nCurrent objects:\n{}\n{loop_ctx}\nGoal: {goal}\n\
          Respond with JSON array only.{repair}",
         serde_json::to_string_pretty(&schema_list).unwrap_or_default(),
         serde_json::to_string_pretty(&objects).unwrap_or_default(),
@@ -123,6 +173,22 @@ impl Planner for FallbackPlanner {
         let mut last = PlanError::Failed("no planners".into());
         for p in &self.chain {
             match p.plan(goal, host) {
+                Ok(steps) => return Ok(steps),
+                Err(e) => last = e,
+            }
+        }
+        Err(last)
+    }
+
+    fn plan_turn(
+        &self,
+        goal: &str,
+        host: &dyn CapabilityHost,
+        obs: &Observation<'_>,
+    ) -> Result<Vec<PlannedStep>, PlanError> {
+        let mut last = PlanError::Failed("no planners".into());
+        for p in &self.chain {
+            match p.plan_turn(goal, host, obs) {
                 Ok(steps) => return Ok(steps),
                 Err(e) => last = e,
             }

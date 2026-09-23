@@ -76,10 +76,11 @@ The domain-free semantic core.
 - `planner/` — `Planner` trait + `PlannedStep`; `rules.rs` (deterministic
   offline planner), `llm.rs` (`LlmPlanner` over `ModelProvider` with
   self-repair reprompt + `FallbackPlanner` chain)
-- `runtime.rs` — plan→act→verify loop in one transaction;
-  `run_scoped` per-run permission profiles
-- `capability.rs` — `AgentRun` capability (`agent.run`, optional
-  `permissions` input)
+- `runtime.rs` — bounded observe→plan→act→inspect loop in one
+  transaction (`RunSpec::done_when` goal predicate, `Budget` iteration/
+  command caps); `run_scoped` per-run permission profiles
+- `capability.rs` — `AgentRun` capability (`agent.run`; optional
+  `permissions`, `done_when`, `max_iterations`, `max_commands` inputs)
 - `provider.rs` — `ModelProvider` trait, `EchoProvider`,
   `OpenAiCompatible` (feature `llm`, env-configured BYOK)
 - `report.rs` — `AgentReport`, step records

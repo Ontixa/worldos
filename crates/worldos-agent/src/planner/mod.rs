@@ -26,8 +26,51 @@ pub struct PlannedStep {
     pub note: String,
 }
 
+/// What a planner can observe between iterations of the tool-use loop.
+#[derive(Debug, Clone)]
+pub struct Observation<'a> {
+    /// 0-based index of the upcoming iteration.
+    pub iteration: usize,
+    /// Commands already executed this run — inputs, outputs, errors.
+    pub steps: &'a [StepRecord],
+    /// Last goal-predicate verdict, when the run declared `done_when`
+    /// (e.g. `` `count(geom:cube) >= 2` not satisfied ``).
+    pub verdict: Option<&'a str>,
+    /// The declared goal predicate the loop must verify, when any.
+    pub goal_expr: Option<&'a str>,
+    /// Commands the run may still execute before the budget trips.
+    pub commands_left: usize,
+}
+
+impl Default for Observation<'_> {
+    fn default() -> Self {
+        Self {
+            iteration: 0,
+            steps: &[],
+            verdict: None,
+            goal_expr: None,
+            commands_left: usize::MAX,
+        }
+    }
+}
+
 pub trait Planner: Send + Sync {
+    /// Single-shot planning: turn a goal + world snapshot into steps.
     fn plan(&self, goal: &str, host: &dyn CapabilityHost) -> Result<Vec<PlannedStep>, PlanError>;
+
+    /// Iterative planning for the tool-use loop: observe what the run has
+    /// already done and propose the NEXT batch of steps. The default just
+    /// replans the goal — correct for stateless planners (`RulePlanner`),
+    /// while stateful ones (`LlmPlanner`) use the observation to react.
+    /// Returning an empty batch means "no further steps to propose".
+    fn plan_turn(
+        &self,
+        goal: &str,
+        host: &dyn CapabilityHost,
+        _obs: &Observation<'_>,
+    ) -> Result<Vec<PlannedStep>, PlanError> {
+        self.plan(goal, host)
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
