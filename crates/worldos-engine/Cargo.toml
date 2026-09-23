@@ -21,6 +21,7 @@ time.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+proptest.workspace = true
 worldos-agent = { path = "../worldos-agent" }
 worldos-adapter-cadrum = { path = "../worldos-adapter-cadrum" }
 serde_json.workspace = true

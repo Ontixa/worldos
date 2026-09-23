@@ -15,6 +15,11 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 /// Current on-disk/in-memory schema version of the project model.
 pub const PROJECT_SCHEMA_VERSION: u32 = 1;
 
+/// Reserved `SetProjectMeta` key carrying the project *name*. The name
+/// lives on `Project::name`, not in `settings`, so applying such an op
+/// writes the field — never a `settings["__name"]` zombie entry.
+pub const PROJECT_NAME_META_KEY: &str = "__name";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
     pub id: ProjectId,
@@ -137,12 +142,22 @@ impl Project {
             }
             StateOp::SetProjectMeta { key, before, after } => {
                 let target = if forward { after } else { before };
-                match target {
-                    Some(v) => {
-                        self.settings.insert(key.clone(), v.clone());
+                if key == PROJECT_NAME_META_KEY {
+                    // `project.rename` records the name under this key;
+                    // undo/redo/replay must restore `project.name`, not
+                    // a settings entry. Non-string values are recorded
+                    // no-ops (the field is always a string).
+                    if let Some(v) = target.as_ref().and_then(|v| v.as_str()) {
+                        self.name = v.to_string();
                     }
-                    None => {
-                        self.settings.remove(key);
+                } else {
+                    match target {
+                        Some(v) => {
+                            self.settings.insert(key.clone(), v.clone());
+                        }
+                        None => {
+                            self.settings.remove(key);
+                        }
                     }
                 }
             }
@@ -160,12 +175,16 @@ impl Project {
 
     /// Delete object plus all relations that reference it.
     /// Caller is responsible for recording the inverse ops.
+    ///
+    /// `core:contains` cycles and self-loops are legal in the graph —
+    /// the visited set keeps traversal finite.
     pub fn collect_subtree(&self, root: ObjectId) -> Vec<ObjectId> {
+        let mut seen = HashSet::from([root]);
         let mut out = vec![root];
         let mut stack = vec![root];
         while let Some(id) = stack.pop() {
             for rel in self.relations_from(id) {
-                if rel.type_id == crate::known::rel::CONTAINS {
+                if rel.type_id == crate::known::rel::CONTAINS && seen.insert(rel.to) {
                     out.push(rel.to);
                     stack.push(rel.to);
                 }

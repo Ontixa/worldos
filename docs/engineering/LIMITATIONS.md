@@ -19,9 +19,18 @@ Brutally honest current-state constraints. Updated when reality changes.
 
 ## Persistence & recovery
 
-- **No crash-injection test suite yet.** Saves are atomic by
-  construction (single SQLite transaction + WAL), but restart-after-
-  kill recovery is not systematically proven.
+- **Crash-injection coverage is process-level only.**
+  `worldos-store/tests/crash_recovery.rs` proves restart-after-`abort()`
+  mid-write recovers the last committed snapshot and that a committed
+  save survives an un-checkpointed WAL — via a real spawned process,
+  not a mocked failure. Injected I/O errors *inside* `SqliteStore`
+  (e.g. fsync failure mid-commit) are untested; the store relies on
+  SQLite's own atomicity there.
+- **Save latency is real on Windows.** `synchronous=FULL` + WAL means
+  `Engine::create`/`save` pay multiple fsyncs (measured ~16s create,
+  ~4s save on a Windows dev box under Defender-class AV scanning).
+  Property-test case counts are deliberately bounded for this; a
+  batched or relaxed-durability mode is unexplored.
 - **Migration coverage is thin.** Only schema v1 exists; no
   historical-version fixture matrix.
 - **CAD artifacts require a sidecar.** BRep/STEP/STL outputs are stored in
@@ -103,5 +112,10 @@ Brutally honest current-state constraints. Updated when reality changes.
 
 ## Testing
 
-- 36 tests cover the golden path. No property tests, no fuzzing, no
-  malformed-input campaigns, no migration matrix.
+- Property tests now cover engine undo/redo round-trips, failed-
+  transaction purity, save/reopen semantic equality, store snapshot
+  round-trips, and process-abort crash recovery (`proptest`, bounded
+  deterministic cases). Still missing: fuzz targets (requirement
+  parser, StateOp streams, JSON-RPC, plugin protocol), malformed-input
+  campaigns beyond truncated/garbage project files, and a migration
+  matrix.

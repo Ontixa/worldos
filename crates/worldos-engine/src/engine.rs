@@ -313,6 +313,14 @@ impl Engine {
             }
             Err(e) => {
                 let txn = self.open_txn.as_mut().unwrap();
+                // A failed command is atomic even inside a caller-managed
+                // transaction: revert the ops it appended so a later
+                // commit carries no residue. The `ok:false` record stays
+                // as the audit trail of the attempt.
+                let partial = txn.ops.split_off(ops_before);
+                for op in partial.iter().rev() {
+                    let _ = self.project.apply(op, false);
+                }
                 txn.commands.push(CommandRecord {
                     envelope: env,
                     ok: false,
