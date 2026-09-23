@@ -73,6 +73,13 @@ Only demonstrably working behavior is listed here. Verified on
   the BRep (world-space truth).
 - **WorldBench v0** — `worldos-bench` crate + `bench/tasks/*.yaml`
   corpus (6 tasks) + `bench/reports/v0-baseline.json` (6/6 pass).
+- **Adversarial property tests** (`proptest`) — random command
+  sequences prove undo-all restores initial state and redo-all
+  restores final; failed commands inside explicit transactions leave
+  no graph or journal residue; random snapshots survive
+  save→reopen byte-exact (project + history); spawned-process
+  `abort()` mid-write and post-commit recovers the last committed
+  snapshot (`worldos-store/tests/crash_recovery.rs`).
 
 ## Verified external dependency
 
@@ -89,6 +96,7 @@ Only demonstrably working behavior is listed here. Verified on
   `edge_ids`/`face_ids` in `cad:shape.topology` are raw kernel ids.
 - Deep regen: `cad.regenerate` replays one node using sources' current
   BReps; no topological replay of a stale chain yet.
-- Property tests, fuzz targets, crash-injection tests.
+- Fuzz targets (requirement parser, StateOp streams, JSON-RPC, plugin
+  protocol, migration input) and in-process I/O-fault injection.
 - Plugin sandboxing (native plugins are trusted local code).
 - Collaboration / multi-writer.

@@ -33,10 +33,20 @@ the next ~5 items, not the backlog.
    `agent.run` (`done_when`/`max_iterations`/`max_commands`) and CLI
    `--done-when`. Remaining: natural-language goals still need a caller-
    supplied predicate — RulePlanner cannot synthesize one.
-7. **Adversarial hardening** — property tests (undo/redo round-trips,
-   save/reopen invariants, failed-txn purity), fuzz targets
+7. **Adversarial hardening** — partly done: property tests shipped
+   (`proptest`): engine undo/redo round-trips + failed-transaction
+   purity (`worldos-engine/tests/property_state_machine.rs`),
+   save/reopen invariants over random projects incl. journal
+   (`property_persistence.rs`), store-level snapshot round-trips +
+   crash injection (`worldos-store/tests/crash_recovery.rs` — real
+   `abort()` mid-write and post-commit, truncation/garbage rejection).
+   Found + fixed: stale journal index after redo-tail truncation,
+   `project.rename` undo writing `settings["__name"]`, unbounded
+   `core:contains` cycle traversal. Remaining: fuzz targets
    (requirement parser, StateOp streams, JSON-RPC, plugin protocol,
-   migration input), crash-injection at persistence boundaries.
+   migration input) and in-process I/O-fault injection inside the
+   store (current crash coverage is process abort, not injected
+   `Write` errors).
 
 ## Then
 

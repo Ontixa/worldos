@@ -5,6 +5,7 @@ use crate::handler::{CommandContext, CommandHandler};
 use crate::schema::{CommandSchema, props};
 use serde_json::{Value, json};
 use worldos_kernel::delta::StateOp;
+use worldos_kernel::project::PROJECT_NAME_META_KEY;
 
 pub struct ProjectRename;
 
@@ -22,7 +23,7 @@ impl CommandHandler for ProjectRename {
         let before = json!(ctx.project.name);
         ctx.project.name = name.clone();
         ctx.ops.push(StateOp::SetProjectMeta {
-            key: "__name".into(),
+            key: PROJECT_NAME_META_KEY.into(),
             before: Some(before),
             after: Some(json!(name)),
         });
@@ -47,7 +48,13 @@ impl CommandHandler for ProjectSetMeta {
     fn execute(&self, ctx: &mut CommandContext, input: &Value) -> Result<Value, CommandError> {
         let key = input["key"].as_str().unwrap().to_string();
         let value = input["value"].clone();
-        let before = ctx.project.settings.get(&key).cloned();
+        // `__name` is the reserved project-name key: the inverse must
+        // capture the old name, not a settings entry it never had.
+        let before = if key == PROJECT_NAME_META_KEY {
+            Some(json!(ctx.project.name))
+        } else {
+            ctx.project.settings.get(&key).cloned()
+        };
         let op = StateOp::SetProjectMeta {
             key: key.clone(),
             before,

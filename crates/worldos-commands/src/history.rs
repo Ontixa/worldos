@@ -17,9 +17,13 @@ impl History {
     }
 
     /// Append a committed transaction. Drops any redo tail.
-    pub fn push(&mut self, record: TransactionRecord) {
+    /// `index` is normalized to the record's journal position so it
+    /// matches the persisted/loaded form (`idx` column = row position):
+    /// a commit after undos must not leave a stale, non-contiguous
+    /// index on the in-memory record.
+    pub fn push(&mut self, mut record: TransactionRecord) {
         self.records.truncate(self.cursor);
-        // clear `undone` flags on truncated tail implicitly by removal
+        record.index = self.cursor as u64;
         self.records.push(record);
         self.cursor = self.records.len();
     }

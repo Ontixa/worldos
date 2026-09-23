@@ -56,3 +56,6 @@ test-results/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 NUL
+
+# Proptest failure seeds (regenerated on failure; not repo state)
+*.proptest-regressions
