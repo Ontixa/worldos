@@ -6,6 +6,8 @@
 //! [`migrate`].
 
 use crate::error::StoreError;
+#[cfg(any(test, feature = "fault-injection"))]
+use crate::fault::{FaultInjector, FaultPoint};
 use crate::snapshot::{FORMAT_VERSION, Snapshot};
 use crate::store::ProjectStore;
 use rusqlite::{Connection, params};
@@ -53,9 +55,19 @@ CREATE INDEX IF NOT EXISTS idx_relations_to ON relations(to_id);
 /// Ordered schema migrations; index = target user_version - 1.
 const MIGRATIONS: &[&str] = &[SCHEMA_V1];
 
+/// Row-deletion phase of `save`, executed inside its transaction.
+/// `inject_torn_save` splits this batch to replay the same statements
+/// as individually committed writes — identical SQL, no transaction.
+const SAVE_WIPE_SQL: &str =
+    "DELETE FROM objects; DELETE FROM relations; DELETE FROM transactions; DELETE FROM meta;";
+
 pub struct SqliteStore {
     path: PathBuf,
     conn: Connection,
+    /// Test-only fault seam (`fault-injection` feature / `cfg(test)`);
+    /// absent from production builds.
+    #[cfg(any(test, feature = "fault-injection"))]
+    faults: FaultInjector,
 }
 
 impl SqliteStore {
@@ -66,7 +78,12 @@ impl SqliteStore {
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "FULL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
-        let mut store = Self { path, conn };
+        let mut store = Self {
+            path,
+            conn,
+            #[cfg(any(test, feature = "fault-injection"))]
+            faults: FaultInjector::default(),
+        };
         store.migrate()?;
         Ok(store)
     }
@@ -77,6 +94,8 @@ impl SqliteStore {
         let mut store = Self {
             path: PathBuf::from(":memory:"),
             conn,
+            #[cfg(any(test, feature = "fault-injection"))]
+            faults: FaultInjector::default(),
         };
         store.migrate()?;
         Ok(store)
@@ -142,6 +161,8 @@ impl ProjectStore for SqliteStore {
             relations: Default::default(),
             settings: serde_json::from_str(&meta("settings").unwrap_or_else(|_| "{}".into()))?,
         };
+        #[cfg(any(test, feature = "fault-injection"))]
+        self.faults.check(FaultPoint::LoadAfterMeta)?;
 
         let mut stmt = self
             .conn
@@ -157,6 +178,8 @@ impl ProjectStore for SqliteStore {
             ))
         })?;
         for row in rows {
+            #[cfg(any(test, feature = "fault-injection"))]
+            self.faults.check(FaultPoint::LoadObjects)?;
             let (id, type_id, name, tags, components, meta) = row?;
             let obj = worldos_kernel::Object {
                 id: id
@@ -185,6 +208,8 @@ impl ProjectStore for SqliteStore {
             ))
         })?;
         for row in rows {
+            #[cfg(any(test, feature = "fault-injection"))]
+            self.faults.check(FaultPoint::LoadRelations)?;
             let (id, type_id, from, to, properties, meta) = row?;
             let rel = worldos_kernel::Relation {
                 id: id
@@ -221,6 +246,8 @@ impl ProjectStore for SqliteStore {
             ))
         })?;
         for row in rows {
+            #[cfg(any(test, feature = "fault-injection"))]
+            self.faults.check(FaultPoint::LoadJournal)?;
             let (id, actor, label, started, committed, undone, commands, ops) = row?;
             history.records.push(worldos_commands::TransactionRecord {
                 id: id
@@ -256,7 +283,9 @@ impl ProjectStore for SqliteStore {
     fn save(&mut self, snapshot: &Snapshot) -> Result<(), StoreError> {
         let tx = self.conn.transaction()?;
         let p = &snapshot.project;
-        tx.execute_batch("DELETE FROM objects; DELETE FROM relations; DELETE FROM transactions; DELETE FROM meta;")?;
+        tx.execute_batch(SAVE_WIPE_SQL)?;
+        #[cfg(any(test, feature = "fault-injection"))]
+        self.faults.check(FaultPoint::SaveAfterWipe)?;
         {
             let mut m = tx.prepare("INSERT INTO meta(key, value) VALUES(?1, ?2)")?;
             for (k, v) in [
@@ -270,6 +299,8 @@ impl ProjectStore for SqliteStore {
                 m.execute(params![k, v])?;
             }
         }
+        #[cfg(any(test, feature = "fault-injection"))]
+        self.faults.check(FaultPoint::SaveAfterMeta)?;
         {
             let mut s = tx.prepare(
                 "INSERT INTO objects(id, type_id, name, tags, components, meta)
@@ -286,6 +317,8 @@ impl ProjectStore for SqliteStore {
                 ])?;
             }
         }
+        #[cfg(any(test, feature = "fault-injection"))]
+        self.faults.check(FaultPoint::SaveAfterObjects)?;
         {
             let mut s = tx.prepare(
                 "INSERT INTO relations(id, type_id, from_id, to_id, properties, meta)
@@ -302,6 +335,8 @@ impl ProjectStore for SqliteStore {
                 ])?;
             }
         }
+        #[cfg(any(test, feature = "fault-injection"))]
+        self.faults.check(FaultPoint::SaveAfterRelations)?;
         {
             let mut s = tx.prepare(
                 "INSERT INTO transactions(idx, id, actor, label, started_at, committed_at, undone, commands, ops)
@@ -321,7 +356,71 @@ impl ProjectStore for SqliteStore {
                 ])?;
             }
         }
+        #[cfg(any(test, feature = "fault-injection"))]
+        self.faults.check(FaultPoint::SaveAfterJournal)?;
+        #[cfg(any(test, feature = "fault-injection"))]
+        self.faults.check(FaultPoint::SaveBeforeCommit)?;
         tx.commit()?;
+        #[cfg(any(test, feature = "fault-injection"))]
+        self.faults.check(FaultPoint::SaveAfterCommit)?;
         Ok(())
+    }
+}
+
+/// Deterministic I/O-fault injection — test/fuzz seam only. Compiled
+/// under `cfg(test)` or the `fault-injection` feature; none of this
+/// exists in a production build. See [`crate::fault`] for the model.
+#[cfg(any(test, feature = "fault-injection"))]
+impl SqliteStore {
+    /// Arm a one-shot fault: the next pass through `point` inside
+    /// `save`/`load` returns `StoreError::Io`, then disarms.
+    pub fn inject_fault(&mut self, point: FaultPoint) {
+        self.faults.arm(point);
+    }
+
+    /// Arm several one-shot faults at once.
+    pub fn inject_faults(&mut self, points: impl IntoIterator<Item = FaultPoint>) {
+        for p in points {
+            self.faults.arm(p);
+        }
+    }
+
+    /// Disarm everything without firing.
+    pub fn clear_faults(&mut self) {
+        self.faults.clear();
+    }
+
+    /// Faults still armed. An armed fault that never fired means the
+    /// instrumented path was not reached — tests assert this to prove
+    /// the fault landed at the intended boundary.
+    pub fn faults_armed(&self) -> usize {
+        self.faults.armed_count()
+    }
+
+    /// Replay the row-deletion phase of `save` OUTSIDE a transaction —
+    /// each wipe statement commits to disk individually — then report
+    /// failure once `committed_wipes` statements have landed. A real,
+    /// durable torn write: the file stays a valid SQLite database whose
+    /// project rows are gone and never rewritten.
+    ///
+    /// `committed_wipes` counts statements in `save` order (objects →
+    /// relations → transactions → meta). ≥4 wipes meta too, so the
+    /// reopened file reports `NotFound`; 1–3 keeps meta — the file
+    /// "exists" but is hollow.
+    ///
+    /// This models the failure the save transaction guards against;
+    /// production `save` can never produce it.
+    pub fn inject_torn_save(&mut self, committed_wipes: usize) -> Result<(), StoreError> {
+        for stmt in SAVE_WIPE_SQL
+            .split(';')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .take(committed_wipes)
+        {
+            self.conn.execute_batch(stmt)?;
+        }
+        Err(StoreError::Io(std::io::Error::other(format!(
+            "injected torn save after {committed_wipes} committed wipes"
+        ))))
     }
 }

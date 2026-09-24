@@ -5,6 +5,13 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+# Test-only seam: deterministic in-process I/O-fault injection inside
+# SqliteStore (`fault` module + inject_* methods). Never enabled for
+# production builds; the self dev-dependency below turns it on for the
+# crate's own integration tests.
+fault-injection = []
+
 [dependencies]
 worldos-kernel = { path = "../worldos-kernel" }
 worldos-commands = { path = "../worldos-commands" }
@@ -18,3 +25,4 @@ time.workspace = true
 [dev-dependencies]
 tempfile.workspace = true
 proptest.workspace = true
+worldos-store = { path = ".", features = ["fault-injection"] }
