@@ -54,11 +54,17 @@ the next ~5 items, not the backlog.
    `core:contains` cycle traversal. Fuzz targets shipped (`fuzz/`,
    libFuzzer via cargo-fuzz, own workspace): `requirement_expr`,
    `state_op_stream`, `json_rpc`, `plugin_protocol`,
-   `store_migration` — bounded smoke on PR/main, 5-minute weekly
-   campaign (`.github/workflows/fuzz.yml`). Found + fixed on first
-   campaign: UTF-8 char-boundary panic in `split_top`/`split_cmp`
-   (any multi-byte input crashed the requirement parser), plus a
-   pre-emptive `MAX_EXPR_DEPTH` cap on `not`/paren recursion.
+   `store_migration`, `cad_selector`, `mesh_import` — bounded smoke on
+   PR/main, 5-minute weekly campaign (`.github/workflows/fuzz.yml`).
+   Found + fixed on first campaign: UTF-8 char-boundary panic in
+   `split_top`/`split_cmp` (any multi-byte input crashed the
+   requirement parser), plus a pre-emptive `MAX_EXPR_DEPTH` cap on
+   `not`/paren recursion. While wiring `mesh_import` (STL/OBJ parsers
+   behind `geometry.import`, plus the `geom:mesh` component decoder):
+   fixed an `i64` overflow panic on OBJ face indices near `i64::MIN`
+   (`positions.len() + idx` now saturates into the range check) and a
+   `MAX_IMPORT_TRIANGLES` bypass for exact-length STL files (count is
+   now capped before parsing, not only in `parse`).
    Remaining: in-process I/O-fault injection inside the store
    (current crash coverage is process abort, not injected `Write`
    errors).
