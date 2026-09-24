@@ -451,6 +451,110 @@ fn load_shape_id(
     Ok((sid, state))
 }
 
+/// Parse a selector argument — accepts the JSON object form
+/// (`{"op":"top_face", …}`) or a bare-string shorthand for the
+/// zero-argument ops (`"top_face"` ≡ `{"op":"top_face"}`).
+fn parse_selector(v: &Value) -> Result<worldos_cad::Selector, CommandError> {
+    let v = match v.as_str() {
+        Some(op) => json!({"op": op}),
+        None => v.clone(),
+    };
+    serde_json::from_value(v).map_err(|e| CommandError::Failed(format!("bad selector: {e}")))
+}
+
+/// Resolve the effective edge id set for fillet/chamfer on the loaded
+/// shape `sid`: `edge_select` (semantic expression) ∪ raw `edge_ids`.
+/// Neither present → empty vec (kernel convention: all edges).
+///
+/// Resolution is deterministic against the CURRENT topology of `sid`.
+/// Raw ids that no longer exist fail `SelectorStale`; an empty result
+/// fails `SelectorEmpty` — silent no-match is not allowed to produce a
+/// degenerate feature.
+fn resolve_edge_params(
+    kernel: &dyn CadKernel,
+    sid: ShapeId,
+    params: &Value,
+) -> Result<Vec<u64>, CommandError> {
+    let raw: Vec<u64> = params
+        .get("edge_ids")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|x| x.as_u64()).collect())
+        .unwrap_or_default();
+    let sel = params
+        .get("edge_select")
+        .filter(|v| !v.is_null())
+        .map(parse_selector)
+        .transpose()?;
+    let sel = match (raw.is_empty(), sel) {
+        (true, None) => return Ok(vec![]),
+        (true, Some(s)) => s,
+        (false, None) => worldos_cad::Selector::EdgeIds { ids: raw },
+        (false, Some(s)) => worldos_cad::Selector::Union {
+            of: vec![worldos_cad::Selector::EdgeIds { ids: raw }, s],
+        },
+    };
+    let view = kernel
+        .topology_view(sid)
+        .map_err(|e| CommandError::Failed(format!("topology view failed: {e}")))?;
+    let ids = worldos_cad::resolve_edges(&sel, &view)
+        .map_err(|e| CommandError::Failed(format!("edge selector failed: {e}")))?;
+    if ids.is_empty() {
+        return Err(CommandError::Failed(format!(
+            "edge selector `{}` matched no edges",
+            sel.describe()
+        )));
+    }
+    Ok(ids.into_iter().collect())
+}
+
+/// Resolve an optional `select` argument against the loaded shape `sid`
+/// into a `selection` report for command outputs. `None` in → `None`
+/// out. Faces report their summed `area_mm2`; edges report ids only.
+fn resolve_selection(
+    kernel: &dyn CadKernel,
+    sid: ShapeId,
+    select: Option<&Value>,
+) -> Result<Option<Value>, CommandError> {
+    let Some(v) = select.filter(|v| !v.is_null()) else {
+        return Ok(None);
+    };
+    let sel = parse_selector(v)?;
+    let target = sel
+        .target()
+        .map_err(|e| CommandError::Failed(format!("selector failed: {e}")))?;
+    let view = kernel
+        .topology_view(sid)
+        .map_err(|e| CommandError::Failed(format!("topology view failed: {e}")))?;
+    let report = match target {
+        worldos_cad::SelectorTarget::Face => {
+            let ids = worldos_cad::resolve_faces(&sel, &view)
+                .map_err(|e| CommandError::Failed(format!("selector failed: {e}")))?;
+            let area: f64 = view
+                .faces
+                .iter()
+                .filter(|f| ids.contains(&f.id))
+                .map(|f| f.area_mm2)
+                .sum();
+            json!({
+                "kind": "faces",
+                "matched": ids.len(),
+                "ids": ids.into_iter().collect::<Vec<u64>>(),
+                "area_mm2": area,
+            })
+        }
+        worldos_cad::SelectorTarget::Edge => {
+            let ids = worldos_cad::resolve_edges(&sel, &view)
+                .map_err(|e| CommandError::Failed(format!("selector failed: {e}")))?;
+            json!({
+                "kind": "edges",
+                "matched": ids.len(),
+                "ids": ids.into_iter().collect::<Vec<u64>>(),
+            })
+        }
+    };
+    Ok(Some(report))
+}
+
 /// `cad.measure` — kernel-verified measures on demand. Rewrites the
 /// derived `cad:shape` component (undoable write).
 pub struct CadMeasure {
@@ -468,11 +572,15 @@ impl CommandHandler for CadMeasure {
         CommandSchema::write(
             "cad.measure",
             "cad",
-            "Kernel-verified volume/area/bbox/center for a cad:body (mm, mm3, mm2)",
+            "Kernel-verified volume/area/bbox/center for a cad:body (mm, mm3, mm2); optional `select` resolves a topology selector into the report",
             props::object(
                 &[],
                 json!({
-                    "object": {"type": "string", "description": "id or name"}
+                    "object": {"type": "string", "description": "id or name"},
+                    "select": {
+                        "type": ["object", "string"],
+                        "description": "topology selector resolved against the current shape (docs/cad-selectors.md); adds `selection` {kind, matched, ids, area_mm2?} to the output"
+                    }
                 }),
             ),
         )
@@ -490,7 +598,11 @@ impl CommandHandler for CadMeasure {
             .kernel
             .topology(sid)
             .map_err(|e| CommandError::Failed(format!("topology: {e}")))?;
+        // Resolve before dropping the handle; a failed selector still
+        // releases it.
+        let selection = resolve_selection(&*self.services.kernel, sid, input.get("select"));
         self.services.kernel.drop_shape(sid);
+        let selection = selection?;
 
         state.measures = measures;
         state.topology = topology.clone();
@@ -503,11 +615,104 @@ impl CommandHandler for CadMeasure {
             }
         })?;
 
-        Ok(json!({
+        let mut out = json!({
             "id": id.to_string(),
             "measures": serde_json::to_value(measures).unwrap_or(Value::Null),
             "topology": serde_json::to_value(&topology).unwrap_or(Value::Null),
-        }))
+        });
+        if let Some(selection) = selection {
+            out["selection"] = selection;
+        }
+        Ok(out)
+    }
+}
+
+/// `cad.select` — resolve a topology selector against a cad:body and
+/// report the matched kernel ids plus element detail. Pure inspection:
+/// the way an agent (or a human authoring a recipe) previews what an
+/// `edge_select`/`select` expression will hit before committing to a
+/// feature. Writes no state; the command record is the audit trail.
+pub struct CadSelect {
+    services: Arc<CadServices>,
+}
+
+impl CadSelect {
+    pub fn new(services: Arc<CadServices>) -> Self {
+        Self { services }
+    }
+}
+
+impl CommandHandler for CadSelect {
+    fn schema(&self) -> CommandSchema {
+        CommandSchema::write(
+            "cad.select",
+            "cad",
+            "Resolve a semantic topology selector against a cad:body (docs/cad-selectors.md); reports matched ids and element detail",
+            props::object(
+                &["object", "select"],
+                json!({
+                    "object": {"type": "string", "description": "id or name"},
+                    "select": {
+                        "type": ["object", "string"],
+                        "description": "selector expression, e.g. {\"op\":\"top_face\"} or \"edges_adjacent_to\" compound — see docs/cad-selectors.md"
+                    }
+                }),
+            ),
+        )
+    }
+
+    fn execute(&self, ctx: &mut CommandContext, input: &Value) -> Result<Value, CommandError> {
+        let (id, sid, _state) = load_shape(ctx, &self.services, input)?;
+        let out = (|| -> Result<Value, CommandError> {
+            let sel = parse_selector(&input["select"])?;
+            let target = sel
+                .target()
+                .map_err(|e| CommandError::Failed(format!("selector failed: {e}")))?;
+            let view = self
+                .services
+                .kernel
+                .topology_view(sid)
+                .map_err(|e| CommandError::Failed(format!("topology view failed: {e}")))?;
+            match target {
+                worldos_cad::SelectorTarget::Face => {
+                    let ids = worldos_cad::resolve_faces(&sel, &view)
+                        .map_err(|e| CommandError::Failed(format!("selector failed: {e}")))?;
+                    let faces: Vec<Value> = view
+                        .faces
+                        .iter()
+                        .filter(|f| ids.contains(&f.id))
+                        .map(|f| serde_json::to_value(f).unwrap_or(Value::Null))
+                        .collect();
+                    Ok(json!({
+                        "kind": "faces",
+                        "matched": ids.len(),
+                        "ids": ids.into_iter().collect::<Vec<u64>>(),
+                        "faces": faces,
+                    }))
+                }
+                worldos_cad::SelectorTarget::Edge => {
+                    let ids = worldos_cad::resolve_edges(&sel, &view)
+                        .map_err(|e| CommandError::Failed(format!("selector failed: {e}")))?;
+                    let edges: Vec<Value> = view
+                        .edges
+                        .iter()
+                        .filter(|e| ids.contains(&e.id))
+                        .map(|e| serde_json::to_value(e).unwrap_or(Value::Null))
+                        .collect();
+                    Ok(json!({
+                        "kind": "edges",
+                        "matched": ids.len(),
+                        "ids": ids.into_iter().collect::<Vec<u64>>(),
+                        "edges": edges,
+                    }))
+                }
+            }
+        })();
+        self.services.kernel.drop_shape(sid);
+        let mut out = out?;
+        out["id"] = json!(id.to_string());
+        out["select"] = input["select"].clone();
+        Ok(out)
     }
 }
 
@@ -696,7 +901,11 @@ macro_rules! cad_feature {
                             "edge_ids": {
                                 "type": "array",
                                 "items": {"type": "integer"},
-                                "description": "kernel edge ids from cad:shape.topology; empty = all edges"
+                                "description": "kernel edge ids; empty = all edges. Raw ids are load-scoped (cadrum: TShape addresses) — they do not survive a BRep reload, let alone regeneration. Prefer edge_select"
+                            },
+                            "edge_select": {
+                                "type": ["object", "string"],
+                                "description": "semantic edge selector (docs/cad-selectors.md), e.g. {\"op\":\"edges_adjacent_to\",\"faces\":{\"op\":\"top_face\"}}; re-resolved on every regeneration. Unioned with edge_ids"
                             },
                             "name": {"type": "string"},
                             "parent": {"type": "string"}
@@ -711,18 +920,39 @@ macro_rules! cad_feature {
                 input: &Value,
             ) -> Result<Value, CommandError> {
                 let amount = scalar(input, $param_key)?;
-                let edge_ids: Vec<u64> = input
-                    .get("edge_ids")
-                    .and_then(|v| v.as_array())
-                    .map(|a| a.iter().filter_map(|x| x.as_u64()).collect())
-                    .unwrap_or_default();
                 let (src_id, src_shape, _) = load_shape(ctx, &self.services, input)?;
+                let edge_ids = match resolve_edge_params(&*self.services.kernel, src_shape, input)
+                {
+                    Ok(ids) => ids,
+                    Err(e) => {
+                        self.services.kernel.drop_shape(src_shape);
+                        return Err(e);
+                    }
+                };
                 let apply: fn(&dyn CadKernel, ShapeId, f64, &[u64]) -> Result<ShapeId, worldos_cad::CadError> =
                     $call;
-                let out = apply(&*self.services.kernel, src_shape, amount, &edge_ids)
-                    .map_err(|e| CommandError::Failed(format!("{} failed: {e}", $kind)))?;
+                let out = match apply(&*self.services.kernel, src_shape, amount, &edge_ids) {
+                    Ok(out) => out,
+                    Err(e) => {
+                        self.services.kernel.drop_shape(src_shape);
+                        return Err(CommandError::Failed(format!("{} failed: {e}", $kind)));
+                    }
+                };
                 self.services.kernel.drop_shape(src_shape);
 
+                // The recipe stores the SELECTOR expression (re-resolved
+                // on replay), not the resolved ids — resolved ids are a
+                // snapshot of today's topology.
+                let mut recipe = json!({
+                    "source": src_id.to_string(),
+                    $param_key: amount,
+                });
+                if let Some(raw) = input.get("edge_ids").filter(|v| !v.is_null()) {
+                    recipe["edge_ids"] = raw.clone();
+                }
+                if let Some(sel) = input.get("edge_select").filter(|v| !v.is_null()) {
+                    recipe["edge_select"] = sel.clone();
+                }
                 let name = input
                     .get("name")
                     .and_then(|n| n.as_str())
@@ -733,11 +963,7 @@ macro_rules! cad_feature {
                     &self.services,
                     out,
                     $kind,
-                    json!({
-                        "source": src_id.to_string(),
-                        $param_key: amount,
-                        "edge_ids": edge_ids,
-                    }),
+                    recipe,
                     $cmd,
                     ShapeMeta {
                         name,
@@ -997,13 +1223,23 @@ fn regen(
             let src: worldos_kernel::ids::ObjectId = p["source"]
                 .as_str()
                 .and_then(|s| s.parse().ok())
-                .ok_or_else(|| CommandError::Failed("recipe missing `source`".into()))?;
+                .ok_or_else(|| {
+                    CommandError::Failed(format!("{} recipe missing `source`", op.kind))
+                })?;
             let (sid, _) = load_shape_id(ctx, services, src)?;
-            let edge_ids: Vec<u64> = p
-                .get("edge_ids")
-                .and_then(|v| v.as_array())
-                .map(|a| a.iter().filter_map(|x| x.as_u64()).collect())
-                .unwrap_or_default();
+            // Recipes store the selector EXPRESSION (`edge_select`), not
+            // resolved ids — re-resolve against the source's current
+            // topology so the feature follows parametric change.
+            let edge_ids = match resolve_edge_params(k, sid, p) {
+                Ok(ids) => ids,
+                Err(e) => {
+                    k.drop_shape(sid);
+                    return Err(CommandError::Failed(format!(
+                        "regen `{}` failed: {e}",
+                        op.kind
+                    )));
+                }
+            };
             let out = if op.kind == "fillet" {
                 k.fillet(sid, scalar(p, "radius_mm")?, &edge_ids)
             } else {
@@ -1302,6 +1538,7 @@ pub fn cad_handlers(services: Arc<CadServices>) -> Vec<Arc<dyn CommandHandler>> 
         Arc::new(CadExportStl::new(services.clone())),
         Arc::new(CadImportStep::new(services.clone())),
         Arc::new(CadSetParam::new(services.clone())),
-        Arc::new(CadRegenerate::new(services)),
+        Arc::new(CadRegenerate::new(services.clone())),
+        Arc::new(CadSelect::new(services)),
     ]
 }

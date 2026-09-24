@@ -122,6 +122,31 @@ partial (or fully written but with uncertain durability). Inspect/remove that
 file manually before retrying. Process crashes can likewise leave output behind;
 atomic publication and crash rollback are not claimed.
 
+## Topology selectors
+
+`cad.fillet`, `cad.chamfer` and `cad.measure` take a semantic `select` /
+`edge_select` expression instead of (or alongside) raw kernel ids, and
+`cad.select` resolves one for inspection. The full grammar and stability
+contract live in [cad-selectors.md](cad-selectors.md). Example batch:
+
+```json
+[
+  {"type":"cad.create_box","input":{"size_mm":[50,40,20],"name":"block"}},
+  {"type":"cad.select","input":{"object":"block","select":{"op":"top_face"}}},
+  {"type":"cad.fillet","input":{"object":"block","radius_mm":2.0,"name":"rounded",
+    "edge_select":{"op":"edges_adjacent_to","faces":{"op":"top_face"}}}},
+  {"type":"cad.set_param","input":{"object":"block","params":{"size_mm":[60,40,20]}}},
+  {"type":"cad.regenerate","input":{"object":"rounded"}}
+]
+```
+
+The recipe persisted on `rounded` stores the selector *expression* —
+`cad.regenerate` re-resolves it against the rebuilt source, so the
+fillet lands on the new top edges. Raw `edge_ids` pin kernel ids that
+are load-scoped (OCCT TShape addresses under cadrum) — already dead by
+the next command — and fail `SelectorStale` when they no longer exist.
+Ambiguity and empty matches are errors, not silent defaults.
+
 ## Persistence and authority
 
 Keep `cad-demo.worldos` and `cad-demo.worldos.artifacts/` together when copying

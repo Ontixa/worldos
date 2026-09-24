@@ -67,10 +67,24 @@ Only demonstrably working behavior is listed here. Verified on
   `worldos-adapter-cadrum` (OCCT 8.0.1). Commands: `cad.create_{box,
   cylinder,sphere}`, `cad.boolean`, `cad.fillet`, `cad.chamfer`,
   `cad.transform`, `cad.measure`, `cad.export_{step,stl}`,
-  `cad.import_step`, `cad.set_param`, `cad.regenerate`. `cad:operation`
-  recipes are replayable; `core:derived-from` edges form the feature
-  tree; `cad:shape.stale` flags dependents. `position` is baked into
-  the BRep (world-space truth).
+  `cad.import_step`, `cad.set_param`, `cad.regenerate`, `cad.select`.
+  `cad:operation` recipes are replayable; `core:derived-from` edges
+  form the feature tree; `cad:shape.stale` flags dependents.
+  `position` is baked into the BRep (world-space truth).
+- **Semantic topology selectors** — `Selector` expressions
+  (`top_face`, `faces_normal_to`, `faces_axis_to`, `faces_of_kind`,
+  `face_extreme`, `edges_adjacent_to`, `edges_extreme`, union /
+  intersect / difference) resolve deterministically over
+  `CadKernel::topology_view` (per-face center/normal/axis/surface-kind/
+  boundary-edges, per-edge endpoints). `cad.fillet`/`cad.chamfer` take
+  `edge_select`, `cad.measure` takes `select`, `cad.select` previews
+  resolution with element detail. Recipes persist the expression and
+  re-resolve on regeneration; raw `edge_ids` are still accepted but are
+  load-scoped (cadrum TShape addresses) — they fail `SelectorStale`
+  rather than silently matching a different element.
+  Structured failures: `SelectorEmpty` / `SelectorAmbiguous` /
+  `SelectorKind` / `SelectorStale` / `BadSelector`. Contract:
+  `docs/cad-selectors.md`.
 - **WorldBench v0** — `worldos-bench` crate + `bench/tasks/*.yaml`
   corpus (6 tasks) + `bench/reports/v0-baseline.json` (6/6 pass).
 - **Adversarial property tests** (`proptest`) — random command
@@ -92,8 +106,9 @@ Only demonstrably working behavior is listed here. Verified on
 
 ## Not yet working (see LIMITATIONS.md)
 
-- Semantic CAD topology selectors (`top_face`, `edges_adjacent_to`) —
-  `edge_ids`/`face_ids` in `cad:shape.topology` are raw kernel ids.
+- Selector limits — see `docs/cad-selectors.md`: no persistent face
+  naming, curved-face normals don't match `faces_normal_to`, match
+  cardinality can change across regeneration.
 - Deep regen: `cad.regenerate` replays one node using sources' current
   BReps; no topological replay of a stale chain yet.
 - Fuzz targets (requirement parser, StateOp streams, JSON-RPC, plugin

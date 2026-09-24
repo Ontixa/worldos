@@ -37,7 +37,26 @@ The domain-free semantic core.
 - `txn.rs` — `Transaction`, `TransactionRecord`
 - `history.rs` — `History` journal, linear-undo cursor
 - `builtin/` — object, relation, document, code, geometry, meta,
-  requirement command handlers
+  requirement command handlers; `cad.rs` — `cad.*` handlers over
+  `CadServices` (kernel + artifact store), recipe replay, selector
+  resolution wiring
+
+## crates/worldos-cad
+
+Kernel-agnostic CAD domain layer (ADR 0006). `kernel.rs` — `CadKernel`
+trait (plain-data boundary: `ShapeId` handles, bytes, POD structs);
+`types.rs` — `Topology`, `Measures`, `TopologyView`/`FaceDetail`/
+`EdgeDetail`; `selector.rs` — `Selector` expressions resolved
+deterministically over a `TopologyView` (face/edge sets, adjacency,
+extremes, set ops — `docs/cad-selectors.md`); `components.rs` —
+`cad:operation` recipe + `cad:shape` derived state; `tolerance.rs` —
+the only tolerance constants.
+
+## crates/worldos-adapter-cadrum
+
+`CadrumKernel` — `CadKernel` over cadrum 0.8.20 / static OCCT 8.0.1;
+session handle table, BRep/STEP/STL I/O, `topology_view` reporting
+normals (planes), surface axes, and face→edge incidence.
 
 ## crates/worldos-store
 
