@@ -1,0 +1,67 @@
+id: history-reopen
+title: Undo position, redo tail and journal survive save/reopen
+steps:
+  - name: create A
+    command: object.create
+    input: {type: core:note, name: alpha}
+    expect:
+      - {kind: ok}
+      - {kind: history, records: 1, cursor: 1}
+
+  - name: create B
+    command: object.create
+    input: {type: core:note, name: beta}
+    expect:
+      - {kind: ok}
+      - {kind: history, records: 2, cursor: 2}
+
+  - name: undo B — a redo tail now exists
+    command: engine.undo
+    expect:
+      - {kind: ok}
+      - {kind: history, records: 2, cursor: 1, can_undo: true, can_redo: true}
+      - {kind: snapshot, save: undone}
+
+  - name: save with the redo tail pending
+    command: engine.save
+    expect:
+      - {kind: ok}
+
+  - name: reopen keeps the cursor mid-history
+    command: engine.reopen
+    expect:
+      - {kind: ok}
+      - {kind: history, records: 2, cursor: 1, can_undo: true, can_redo: true}
+      - {kind: snapshot, eq: undone}
+      - {kind: query_object, name: alpha}
+      - {kind: query_absent, name: beta}
+
+  - name: redo after reopen restores B
+    command: engine.redo
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: beta}
+      - {kind: history, records: 2, cursor: 2, can_redo: false}
+
+  - name: undo everything
+    command: engine.undo
+    expect:
+      - {kind: ok}
+      - {kind: query_absent, name: beta}
+
+  - command: engine.undo
+    expect:
+      - {kind: ok}
+      - {kind: query_absent, name: alpha}
+      - {kind: object_count, count: 0}
+      - {kind: history, records: 2, cursor: 0, can_undo: false, can_redo: true}
+      - {kind: valid}
+
+  - name: a new write truncates the redo tail
+    command: object.create
+    input: {type: core:note, name: gamma}
+    expect:
+      - {kind: ok}
+      - {kind: history, records: 1, cursor: 1, can_redo: false}
+      - {kind: query_absent, name: alpha}
+      - {kind: query_absent, name: beta}

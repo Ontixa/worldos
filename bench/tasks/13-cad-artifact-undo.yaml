@@ -1,0 +1,60 @@
+id: cad-artifact-undo
+title: Artifact digests verify on-disk; undo drops refs but keeps blobs
+steps:
+  - name: 20mm cube
+    command: cad.create_box
+    input: {size_mm: 20, name: cube}
+    expect:
+      - {kind: ok}
+      - {kind: present, path: "output.brep"}
+      # the BRep blob behind every cad:body verifies on read
+      - {kind: artifact_verified, path: "output.brep"}
+
+  - name: export STEP → artifact sidecar
+    command: cad.export_step
+    input: {object: cube}
+    save: cube_step
+    expect:
+      - {kind: ok}
+      - {kind: artifact_verified, path: "output.step"}
+      # `cube_step` binds after this step's checks run — the component
+      # ref is asserted at redo/reopen where the var is live.
+
+  - name: undo drops the step ref — the blob survives as gc-able garbage
+    command: engine.undo
+    expect:
+      - {kind: ok}
+      - {kind: field_absent, name: cube, path: "cad:shape.step"}
+      - {kind: artifact_verified, ref: "${cube_step.step}"}
+
+  - name: redo restores the ref
+    command: engine.redo
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: cube, path: "cad:shape.step", value: "${cube_step.step}"}
+
+  - name: save_as migrates artifacts to the new sidecar
+    command: engine.save_as
+    input: {file: moved.worldos}
+    expect:
+      - {kind: ok}
+      # verified against the moved file's sidecar, not the old one
+      - {kind: artifact_verified, ref: "${cube_step.step}"}
+
+  - name: reopen the moved file — refs still resolve + verify
+    command: engine.reopen
+    input: {file: moved.worldos}
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: cube}
+      - {kind: query_object, name: cube, path: "cad:shape.step", value: "${cube_step.step}"}
+      - {kind: artifact_verified, ref: "${cube_step.step}"}
+      - {kind: valid}
+
+  - name: imported STEP body re-verifies its own source artifact
+    command: cad.import_step
+    input: {step: "${cube_step.step}", name: cube-re}
+    expect:
+      - {kind: ok}
+      - {kind: approx, path: "output.measures.volume_mm3", value: 8000}
+      - {kind: artifact_verified, path: "output.brep"}

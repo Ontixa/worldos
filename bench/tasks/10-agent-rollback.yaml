@@ -1,0 +1,76 @@
+id: agent-rollback
+title: agent.run commits as one transaction; a failed run leaves zero residue
+steps:
+  - name: empty baseline
+    command: capability.run
+    input: {id: project.inspect, input: {}}
+    expect:
+      - {kind: ok}
+      - {kind: eq, path: "output.object_count", value: 0}
+      - {kind: snapshot, save: pristine}
+      - {kind: history, records: 0, cursor: 0, can_undo: false}
+
+  - name: agent creates a cube under a declared predicate
+    command: capability.run
+    input:
+      id: agent.run
+      input:
+        goal: "create a cube named housing"
+        done_when: 'exists_named("housing")'
+        max_iterations: 4
+    expect:
+      - {kind: ok}
+      - {kind: eq, path: "output.status", value: "succeeded"}
+      - {kind: query_object, name: housing}
+      # the run commits ONE transaction: task marker + cube together
+      - {kind: object_count, count: 2}
+      - {kind: object_count, type: "core:agent-task", count: 1}
+      - {kind: history, records: 1, can_undo: true, can_redo: false}
+      - {kind: no_dangling_relations}
+      - {kind: valid}
+
+  - name: undo reverts the whole run at once
+    command: engine.undo
+    expect:
+      - {kind: ok}
+      - {kind: snapshot, eq: pristine}
+      - {kind: history, records: 1, cursor: 0, can_redo: true}
+      - {kind: object_count, count: 0}
+
+  - name: redo puts the whole run back
+    command: engine.redo
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: housing}
+      - {kind: object_count, count: 2}
+      - {kind: snapshot, save: before_doom}
+
+  - name: unsatisfiable predicate → honest failure, full rollback
+    command: capability.run
+    input:
+      id: agent.run
+      input:
+        goal: "create a sphere named ball"
+        done_when: 'exists_named("ghost")'
+        max_iterations: 2
+        max_commands: 8
+    expect:
+      - {kind: ok}
+      - {kind: eq, path: "output.status", value: "failed"}
+      - {kind: query_absent, name: ball}
+      # no graph residue, no journal residue — the run never happened
+      - {kind: snapshot, eq: before_doom}
+      - {kind: history, records: 1}
+      - {kind: no_dangling_relations}
+      - {kind: valid}
+
+  - name: unsupported goal is a clean no-op, not a failure
+    command: capability.run
+    input:
+      id: agent.run
+      input: {goal: "frobnicate the splines"}
+    expect:
+      - {kind: ok}
+      - {kind: eq, path: "output.status", value: "unsupported"}
+      - {kind: snapshot, eq: before_doom}
+      - {kind: history, records: 1}

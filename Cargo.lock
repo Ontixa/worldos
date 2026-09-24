@@ -2108,8 +2108,11 @@ dependencies = [
  "thiserror",
  "time",
  "worldos-adapter-cadrum",
+ "worldos-agent",
+ "worldos-artifact",
  "worldos-cad",
  "worldos-engine",
+ "worldos-kernel",
 ]
 
 [[package]]

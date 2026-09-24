@@ -1,0 +1,72 @@
+id: requirements-staleness
+title: Requirement evaluation writes status + depends-on edges; edits stale them
+steps:
+  - name: cube the requirement reads
+    command: geometry.create_primitive
+    input: {kind: cube, name: block, size: 10}
+    expect:
+      - {kind: ok}
+      - {kind: object_count, type: geom:cube, count: 1}
+
+  - name: requirement on cube volume, claimed satisfied by it
+    command: requirement.create
+    input:
+      name: req-volume
+      expression: 'volume("block") >= 1000'
+      satisfied_by: block
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: req-volume, path: "core:requirement-status.status", value: "unknown"}
+      - {kind: relation_count, type: core:satisfies, from: block, to: req-volume, count: 1}
+
+  - name: evaluate → pass, dependency edge materializes
+    command: requirement.evaluate
+    input: {name: req-volume}
+    expect:
+      - {kind: ok}
+      - {kind: eq, path: "output.results.0.status", value: "pass"}
+      - {kind: relation_count, type: core:depends-on, from: req-volume, to: block, count: 1}
+      - {kind: query_object, name: req-volume, path: "core:requirement-status.status", value: "pass"}
+      - {kind: valid}
+
+  - name: touching the depended-on object stales the requirement
+    command: geometry.transform
+    input: {name: block, translate: [1, 0, 0]}
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: req-volume, path: "core:requirement-status.status", value: "stale"}
+      # one stale-requirement warning is expected here
+      - {kind: valid, max_warnings: 1}
+
+  - name: re-evaluate clears staleness
+    command: requirement.evaluate
+    input: {name: req-volume}
+    expect:
+      - {kind: ok}
+      - {kind: eq, path: "output.results.0.status", value: "pass"}
+      - {kind: query_object, name: req-volume, path: "core:requirement-status.status", value: "pass"}
+      - {kind: valid}
+
+  - name: a failing requirement reports honestly
+    command: requirement.create
+    input:
+      name: req-impossible
+      expression: 'count(geom:sphere) >= 5'
+    expect:
+      - {kind: ok}
+
+  - name: evaluate-all surfaces the failure on the object
+    command: requirement.evaluate
+    input: {all: true}
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: req-impossible, path: "core:requirement-status.status", value: "fail"}
+      - {kind: query_object, name: req-volume, path: "core:requirement-status.status", value: "pass"}
+
+  - name: undo of the evaluation restores prior statuses
+    command: engine.undo
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: req-impossible, path: "core:requirement-status.status", value: "unknown"}
+      - {kind: query_object, name: req-volume, path: "core:requirement-status.status", value: "pass"}
+      - {kind: no_dangling_relations}
