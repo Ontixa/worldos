@@ -20,9 +20,18 @@ the next ~5 items, not the backlog.
 
 ## Next (Forge slice 2: trust & proof)
 
-5. ~~**WorldBench v0**~~ — done: `worldos-bench` crate + `bench/tasks/`
-   (6 tasks) + `bench/reports/v0-baseline.json` (6/6 pass); wired into
-   `scripts/bench.ps1`. Remaining: richer check kinds, corpus growth.
+5. ~~**WorldBench**~~ — done: `worldos-bench` crate + `bench/tasks/`
+   (13 tasks) + reports under `bench/reports/` (13/13 pass); wired into
+   `scripts/bench.ps1`. Richer check kinds shipped: `history` journal
+   invariants, `snapshot` state digests (exact undo/redo, save/reopen,
+   failed-command purity), `object_count`/`relation_count`,
+   `no_dangling_relations`, `field_absent`, `valid`, `artifact_verified`
+   (sidecar re-hash), `file_digest`; plus `capability.run` steps
+   (`agent.run`, `project.inspect`, `geometry.measure`) and `${bench.dir}`
+   tempdir interpolation. Corpus covers relation graphs + cascade undo,
+   requirement staleness, mesh export/import round-trips, agent
+   transaction rollback, history across reopen, failure purity, and CAD
+   artifact undo/save_as migration.
 6. ~~**Agent tool-use loop**~~ — done: `AgentRuntime::run_spec` runs a
    bounded observe→plan→act→inspect loop in one transaction. A declared
    `done_when` predicate (requirement-expression grammar) is the only
@@ -59,8 +68,13 @@ the next ~5 items, not the backlog.
    `cad.measure`, `cad.select` probe command; recipes persist the
    expression and re-resolve on replay. Contract + honest limits in
    `docs/cad-selectors.md`.
-10. Performance baselines (100 / 10k / 100k objects) + bench.ps1
-    wiring.
+10. ~~Performance baselines~~ — done: `worldos-bench perf` measures
+    create/save/reopen/find/search/undo at 100 / 10k / 100k objects
+    through the real command path; `scripts/bench.ps1 -Suite perf`
+    (default `100,10000`, 100k opt-in) writes
+    `bench/reports/worldbench-perf-*.json`. Remaining: none for the
+    baseline itself — statistical rigor (multi-run, percentiles) is
+    deferred with the fuzz targets.
 
 ## Explicitly deferred
 

@@ -1,0 +1,4468 @@
+{
+  "format_version": 2,
+  "generated_at": "2026-09-23T22:34:09.6376696Z",
+  "kernel": "occt-8.0.1-cadrum",
+  "tasks": [
+    {
+      "id": "graph-crud",
+      "title": "Object + relation lifecycle through commands",
+      "file": "01-graph-crud.yaml",
+      "passed": true,
+      "duration_ms": 12060,
+      "steps": [
+        {
+          "index": 0,
+          "name": "create a note",
+          "command": "object.create",
+          "input": {
+            "type": "core:note",
+            "name": "memo"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M3862063PWEJM5S3S8JYZHF2"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "present",
+                "path": "output.id"
+              },
+              "passed": true,
+              "detail": "output.id present = true"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "memo",
+                "path": null,
+                "value": null
+              },
+              "passed": true,
+              "detail": "object `memo` exists"
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "name": "create a second note",
+          "command": "object.create",
+          "input": {
+            "type": "core:note",
+            "name": "memo2"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M3862064GZ6D4V1SFPT01DBE"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "name": "delete the second note",
+          "command": "object.delete",
+          "input": {
+            "name": "memo2"
+          },
+          "status": "ok",
+          "output": {
+            "deleted": [
+              {
+                "id": "01M3862064GZ6D4V1SFPT01DBE",
+                "name": "memo2"
+              }
+            ]
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_absent",
+                "name": "memo2"
+              },
+              "passed": true,
+              "detail": "object `memo2` absent = true"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "name": "schema rejects malformed input",
+          "command": "object.create",
+          "input": {
+            "name": "missing-type"
+          },
+          "status": "ok",
+          "output": {
+            "error": "invalid input for object.create: $: missing required property `type`"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "error",
+                "contains": null
+              },
+              "passed": true,
+              "detail": "failed as expected: invalid input for object.create: $: missing required property `type`"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "undo-redo",
+      "title": "Transaction undo/redo is exact",
+      "file": "02-undo-redo.yaml",
+      "passed": true,
+      "duration_ms": 9763,
+      "steps": [
+        {
+          "index": 0,
+          "name": "create object",
+          "command": "object.create",
+          "input": {
+            "type": "core:note",
+            "name": "undoable"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M3862A3HC6PFGR0XRPKRC19S"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "undoable",
+                "path": null,
+                "value": null
+              },
+              "passed": true,
+              "detail": "object `undoable` exists"
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "name": "undo removes it",
+          "command": "engine.undo",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "undone": "01M3862A3HX4ZFSV3RC1DKGDD1"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_absent",
+                "name": "undoable"
+              },
+              "passed": true,
+              "detail": "object `undoable` absent = true"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "name": "redo restores it",
+          "command": "engine.redo",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "redone": "01M3862A3HX4ZFSV3RC1DKGDD1"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "undoable",
+                "path": null,
+                "value": null
+              },
+              "passed": true,
+              "detail": "object `undoable` exists"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "name": "undo again",
+          "command": "engine.undo",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "undone": "01M3862A3HX4ZFSV3RC1DKGDD1"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_absent",
+                "name": "undoable"
+              },
+              "passed": true,
+              "detail": "object `undoable` absent = true"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "save-reopen",
+      "title": "Project state survives save and reopen",
+      "file": "03-save-reopen.yaml",
+      "passed": true,
+      "duration_ms": 61895,
+      "steps": [
+        {
+          "index": 0,
+          "name": "create a note",
+          "command": "object.create",
+          "input": {
+            "type": "core:note",
+            "name": "persisted"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M3863JBJPX3A1SBSX7HE3YJT"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "name": "save the project",
+          "command": "engine.save",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "saved": true
+          },
+          "duration_ms": 3851,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "name": "reopen from disk",
+          "command": "engine.reopen",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "reopened": "D:\\ytb_tool_temp\\.tmpYAaCdx\\save-reopen.worldos"
+          },
+          "duration_ms": 991,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "persisted",
+                "path": null,
+                "value": null
+              },
+              "passed": true,
+              "detail": "object `persisted` exists"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "name": "save_as to a second file",
+          "command": "engine.save_as",
+          "input": {
+            "file": "moved.worldos"
+          },
+          "status": "ok",
+          "output": {
+            "saved_as": "D:\\ytb_tool_temp\\.tmpYAaCdx\\moved.worldos"
+          },
+          "duration_ms": 15055,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "name": "reopen the moved file",
+          "command": "engine.reopen",
+          "input": {
+            "file": "moved.worldos"
+          },
+          "status": "ok",
+          "output": {
+            "reopened": "D:\\ytb_tool_temp\\.tmpYAaCdx\\moved.worldos"
+          },
+          "duration_ms": 1135,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "persisted",
+                "path": null,
+                "value": null
+              },
+              "passed": true,
+              "detail": "object `persisted` exists"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cad-create-measure",
+      "title": "Real OCCT box creation + kernel-verified measure",
+      "file": "04-cad-create-measure.yaml",
+      "passed": true,
+      "duration_ms": 17529,
+      "steps": [
+        {
+          "index": 0,
+          "name": "create a 50x40x20 box",
+          "command": "cad.create_box",
+          "input": {
+            "size_mm": [
+              50.0,
+              40.0,
+              20.0
+            ],
+            "name": "block"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M3864RVJ3JE1H1R8VAS02KPJ",
+            "name": "block",
+            "type": "cad:body",
+            "brep": "sha256:84d92d15a8bccd8bd7b6fcf563f1f663c6c1c372cac2b261034a719aad7ec5fc",
+            "measures": {
+              "volume_mm3": 39999.99999999999,
+              "area_mm2": 7599.999999999999,
+              "bbox": {
+                "min_mm": [
+                  -1e-7,
+                  -1e-7,
+                  -1e-7
+                ],
+                "max_mm": [
+                  50.0000001,
+                  40.0000001,
+                  20.0000001
+                ]
+              },
+              "center_mm": [
+                25.0,
+                19.999999999999996,
+                10.000000000000002
+              ]
+            },
+            "topology": {
+              "solids": 1,
+              "faces": 6,
+              "edges": 12,
+              "is_solid": true,
+              "is_valid": true,
+              "edge_ids": [
+                1685866571232,
+                1685866570592,
+                1685866573280,
+                1685866572000,
+                1685866570720,
+                1685866571104,
+                1685866570848,
+                1685866572896,
+                1685866571360,
+                1685866571488,
+                1685866571744,
+                1685866571872
+              ],
+              "face_ids": [
+                1685866783328,
+                1685866782208,
+                1685866780768,
+                1685866783008,
+                1685866781408,
+                1685866781568
+              ]
+            }
+          },
+          "duration_ms": 8,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "present",
+                "path": "output.brep"
+              },
+              "passed": true,
+              "detail": "output.brep present = true"
+            },
+            {
+              "check": {
+                "kind": "approx",
+                "path": "output.measures.volume_mm3",
+                "value": 40000.0,
+                "rel": 0.0001
+              },
+              "passed": true,
+              "detail": "output.measures.volume_mm3 = 39999.99999999999 (want ~40000 rel 0.0001)"
+            },
+            {
+              "check": {
+                "kind": "eq",
+                "path": "output.topology.faces",
+                "value": 6
+              },
+              "passed": true,
+              "detail": "output.topology.faces = Some(Number(6)) (want Number(6))"
+            },
+            {
+              "check": {
+                "kind": "eq",
+                "path": "output.topology.edges",
+                "value": 12
+              },
+              "passed": true,
+              "detail": "output.topology.edges = Some(Number(12)) (want Number(12))"
+            },
+            {
+              "check": {
+                "kind": "eq",
+                "path": "output.topology.is_valid",
+                "value": true
+              },
+              "passed": true,
+              "detail": "output.topology.is_valid = Some(Bool(true)) (want Bool(true))"
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "name": "measure it back through the kernel",
+          "command": "cad.measure",
+          "input": {
+            "object": "block"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M3864RVJ3JE1H1R8VAS02KPJ",
+            "measures": {
+              "volume_mm3": 39999.99999999999,
+              "area_mm2": 7599.999999999999,
+              "bbox": {
+                "min_mm": [
+                  -1e-7,
+                  -1e-7,
+                  -1e-7
+                ],
+                "max_mm": [
+                  50.0000001,
+                  40.0000001,
+                  20.0000001
+                ]
+              },
+              "center_mm": [
+                25.0,
+                19.999999999999996,
+                10.000000000000002
+              ]
+            },
+            "topology": {
+              "solids": 1,
+              "faces": 6,
+              "edges": 12,
+              "is_solid": true,
+              "is_valid": true,
+              "edge_ids": [
+                1685866570848,
+                1685866569952,
+                1685866572256,
+                1685866573536,
+                1685866570464,
+                1685866571872,
+                1685866572768,
+                1685866571488,
+                1685866570080,
+                1685866570208,
+                1685866572512,
+                1685866573280
+              ],
+              "face_ids": [
+                1685866575824,
+                1685866577264,
+                1685866576464,
+                1685866574224,
+                1685866576784,
+                1685866576144
+              ]
+            }
+          },
+          "duration_ms": 21,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "approx",
+                "path": "output.measures.volume_mm3",
+                "value": 40000.0,
+                "rel": 0.0001
+              },
+              "passed": true,
+              "detail": "output.measures.volume_mm3 = 39999.99999999999 (want ~40000 rel 0.0001)"
+            },
+            {
+              "check": {
+                "kind": "approx",
+                "path": "output.measures.area_mm2",
+                "value": 7600.0,
+                "rel": 0.0001
+              },
+              "passed": true,
+              "detail": "output.measures.area_mm2 = 7599.999999999999 (want ~7600 rel 0.0001)"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "name": "a non-cad object cannot be measured",
+          "command": "object.create",
+          "input": {
+            "type": "core:note",
+            "name": "notabody"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M3864RW93VQHR6FQP0SYBBWZ"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "name": "measuring the note fails cleanly",
+          "command": "cad.measure",
+          "input": {
+            "object": "notabody"
+          },
+          "status": "ok",
+          "output": {
+            "error": "command failed: object `notabody` is a `core:note`, not a cad:body"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "error",
+                "contains": "cad:body"
+              },
+              "passed": true,
+              "detail": "error `command failed: object `notabody` is a `core:note`, not a cad:body` contains `cad:body`"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cad-parametric",
+      "title": "Boolean + set_param regeneration + staleness propagation",
+      "file": "05-cad-parametric.yaml",
+      "passed": true,
+      "duration_ms": 13584,
+      "steps": [
+        {
+          "index": 0,
+          "name": "base plate 50x40x20",
+          "command": "cad.create_box",
+          "input": {
+            "size_mm": [
+              50.0,
+              40.0,
+              20.0
+            ],
+            "name": "plate-stock"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M386563J4039WKEW8JN3QMB8",
+            "name": "plate-stock",
+            "type": "cad:body",
+            "brep": "sha256:84d92d15a8bccd8bd7b6fcf563f1f663c6c1c372cac2b261034a719aad7ec5fc",
+            "measures": {
+              "volume_mm3": 39999.99999999999,
+              "area_mm2": 7599.999999999999,
+              "bbox": {
+                "min_mm": [
+                  -1e-7,
+                  -1e-7,
+                  -1e-7
+                ],
+                "max_mm": [
+                  50.0000001,
+                  40.0000001,
+                  20.0000001
+                ]
+              },
+              "center_mm": [
+                25.0,
+                19.999999999999996,
+                10.000000000000002
+              ]
+            },
+            "topology": {
+              "solids": 1,
+              "faces": 6,
+              "edges": 12,
+              "is_solid": true,
+              "is_valid": true,
+              "edge_ids": [
+                1685866572896,
+                1685866572256,
+                1685866571360,
+                1685866571488,
+                1685866573408,
+                1685866571616,
+                1685866571744,
+                1685866572768,
+                1685866569952,
+                1685866572000,
+                1685866570208,
+                1685866570336
+              ],
+              "face_ids": [
+                1685866871168,
+                1685866872448,
+                1685866873728,
+                1685866873248,
+                1685866872928,
+                1685866873888
+              ]
+            }
+          },
+          "duration_ms": 2,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "name": "drill tool through the middle",
+          "command": "cad.create_cylinder",
+          "input": {
+            "radius_mm": 5.0,
+            "height_mm": 30.0,
+            "position": [
+              25.0,
+              20.0,
+              -5.0
+            ],
+            "name": "drill"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M386563MY7C467NDEYMPFRMN",
+            "name": "drill",
+            "type": "cad:body",
+            "brep": "sha256:c30274c4f641829993721ad587d2b90f64e64877a6c116aca0f850935e52e340",
+            "measures": {
+              "volume_mm3": 2356.194490192345,
+              "area_mm2": 1099.5574287564277,
+              "bbox": {
+                "min_mm": [
+                  19.9999999,
+                  14.9999999,
+                  -5.0000001
+                ],
+                "max_mm": [
+                  30.0000001,
+                  25.0000001,
+                  25.0000001
+                ]
+              },
+              "center_mm": [
+                25.0,
+                20.0,
+                9.999999999999998
+              ]
+            },
+            "topology": {
+              "solids": 1,
+              "faces": 3,
+              "edges": 3,
+              "is_solid": true,
+              "is_valid": true,
+              "edge_ids": [
+                1685866571616,
+                1685866572384,
+                1685866570720
+              ],
+              "face_ids": [
+                1685866873248,
+                1685866873568,
+                1685866872608
+              ]
+            }
+          },
+          "duration_ms": 2,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "name": "subtract -> plate with a hole",
+          "command": "cad.boolean",
+          "input": {
+            "a": "plate-stock",
+            "b": "drill",
+            "op": "subtract",
+            "name": "plate"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M38656481VENGYC14S323TGD",
+            "name": "plate",
+            "type": "cad:body",
+            "brep": "sha256:e49cbf75f0deb2ee2dc71062a71e29febf6e5987f594994180d5a375778f84f4",
+            "measures": {
+              "volume_mm3": 38429.2036732051,
+              "area_mm2": 8071.238898038468,
+              "bbox": {
+                "min_mm": [
+                  -1e-7,
+                  -1e-7,
+                  -1e-7
+                ],
+                "max_mm": [
+                  50.0000001,
+                  40.0000001,
+                  20.0000001
+                ]
+              },
+              "center_mm": [
+                25.0,
+                20.0,
+                10.0
+              ]
+            },
+            "topology": {
+              "solids": 1,
+              "faces": 7,
+              "edges": 15,
+              "is_solid": true,
+              "is_valid": true,
+              "edge_ids": [
+                1685864829824,
+                1685864830336,
+                1685864835072,
+                1685864829952,
+                1685864834688,
+                1685864831744,
+                1685864834304,
+                1685864830976,
+                1685864828544,
+                1685864832640,
+                1685864830464,
+                1685864830592,
+                1685864832256,
+                1685864834432,
+                1685864834560
+              ],
+              "face_ids": [
+                1685866860128,
+                1685866859008,
+                1685866859328,
+                1685866859648,
+                1685866860448,
+                1685866856608,
+                1685866856768
+              ]
+            }
+          },
+          "duration_ms": 19,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "approx",
+                "path": "output.measures.volume_mm3",
+                "value": 38429.2,
+                "rel": 0.001
+              },
+              "passed": true,
+              "detail": "output.measures.volume_mm3 = 38429.2036732051 (want ~38429.2 rel 0.001)"
+            },
+            {
+              "check": {
+                "kind": "eq",
+                "path": "output.topology.is_valid",
+                "value": true
+              },
+              "passed": true,
+              "detail": "output.topology.is_valid = Some(Bool(true)) (want Bool(true))"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "name": "widen the stock -> plate goes stale",
+          "command": "cad.set_param",
+          "input": {
+            "object": "plate-stock",
+            "params": {
+              "size_mm": [
+                100.0,
+                40.0,
+                20.0
+              ]
+            }
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M386563J4039WKEW8JN3QMB8",
+            "brep": "sha256:27bc00737ce9ace685817bf59e51cc46421282c0e9e3738616fb4e8e2bcd0848",
+            "measures": {
+              "volume_mm3": 79999.99999999999,
+              "area_mm2": 13599.999999999998,
+              "bbox": {
+                "min_mm": [
+                  -1e-7,
+                  -1e-7,
+                  -1e-7
+                ],
+                "max_mm": [
+                  100.0000001,
+                  40.0000001,
+                  20.0000001
+                ]
+              },
+              "center_mm": [
+                50.0,
+                19.999999999999996,
+                10.000000000000002
+              ]
+            },
+            "topology": {
+              "solids": 1,
+              "faces": 6,
+              "edges": 12,
+              "is_solid": true,
+              "is_valid": true,
+              "edge_ids": [
+                1685864832256,
+                1685864830464,
+                1685864835712,
+                1685864832128,
+                1685864828032,
+                1685864831488,
+                1685864835840,
+                1685864828288,
+                1685864828416,
+                1685864831616,
+                1685864828672,
+                1685864829056
+              ],
+              "face_ids": [
+                1685866873248,
+                1685866872128,
+                1685866872608,
+                1685866872768,
+                1685866870688,
+                1685866873888
+              ]
+            }
+          },
+          "duration_ms": 1,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "approx",
+                "path": "output.measures.volume_mm3",
+                "value": 80000.0,
+                "rel": 0.0001
+              },
+              "passed": true,
+              "detail": "output.measures.volume_mm3 = 79999.99999999999 (want ~80000 rel 0.0001)"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "plate",
+                "path": "cad:shape.stale",
+                "value": true
+              },
+              "passed": true,
+              "detail": "`plate` cad:shape.stale = Some(Bool(true)) (want Bool(true))"
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "name": "regenerate the stale plate",
+          "command": "cad.regenerate",
+          "input": {
+            "object": "plate"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M38656481VENGYC14S323TGD",
+            "brep": "sha256:f1c196f392d59b23eed731cb88c8b043f63a00c91cd5d6e02d84cd25b540bc7a",
+            "measures": {
+              "volume_mm3": 78429.20367320509,
+              "area_mm2": 14071.238898038468,
+              "bbox": {
+                "min_mm": [
+                  -1e-7,
+                  -1e-7,
+                  -1e-7
+                ],
+                "max_mm": [
+                  100.0000001,
+                  40.0000001,
+                  20.0000001
+                ]
+              },
+              "center_mm": [
+                50.50070517524953,
+                20.0,
+                10.0
+              ]
+            },
+            "topology": {
+              "solids": 1,
+              "faces": 7,
+              "edges": 15,
+              "is_solid": true,
+              "is_valid": true,
+              "edge_ids": [
+                1685864832000,
+                1685864832512,
+                1685864832640,
+                1685864835968,
+                1685864833024,
+                1685864833664,
+                1685864834304,
+                1685864833920,
+                1685864835712,
+                1685866571744,
+                1685866570976,
+                1685866572896,
+                1685866571104,
+                1685866570208,
+                1685866572640
+              ],
+              "face_ids": [
+                1685866768976,
+                1685866766256,
+                1685866769456,
+                1685866766416,
+                1685866766576,
+                1685866767856,
+                1685866766736
+              ]
+            }
+          },
+          "duration_ms": 17,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "approx",
+                "path": "output.measures.volume_mm3",
+                "value": 78429.2,
+                "rel": 0.001
+              },
+              "passed": true,
+              "detail": "output.measures.volume_mm3 = 78429.20367320509 (want ~78429.2 rel 0.001)"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "plate",
+                "path": "cad:shape.stale",
+                "value": false
+              },
+              "passed": true,
+              "detail": "`plate` cad:shape.stale = Some(Bool(false)) (want Bool(false))"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cad-step-roundtrip",
+      "title": "STEP export -> artifact -> import -> same verified geometry",
+      "file": "06-cad-step-roundtrip.yaml",
+      "passed": true,
+      "duration_ms": 42772,
+      "steps": [
+        {
+          "index": 0,
+          "name": "create a 10mm cube",
+          "command": "cad.create_box",
+          "input": {
+            "size_mm": 10.0,
+            "name": "cube"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M3866BSR6EFDFQTW1BQZDPZJ",
+            "name": "cube",
+            "type": "cad:body",
+            "brep": "sha256:b86356eef64ac0587fd9a835422c3045c904a0b52d3913337b3559b0d8fdefc3",
+            "measures": {
+              "volume_mm3": 999.9999999999998,
+              "area_mm2": 599.9999999999999,
+              "bbox": {
+                "min_mm": [
+                  -1e-7,
+                  -1e-7,
+                  -1e-7
+                ],
+                "max_mm": [
+                  10.0000001,
+                  10.0000001,
+                  10.0000001
+                ]
+              },
+              "center_mm": [
+                5.0,
+                5.0,
+                5.0
+              ]
+            },
+            "topology": {
+              "solids": 1,
+              "faces": 6,
+              "edges": 12,
+              "is_solid": true,
+              "is_valid": true,
+              "edge_ids": [
+                1685866571744,
+                1685866573664,
+                1685866571872,
+                1685866572768,
+                1685866572000,
+                1685866569952,
+                1685866570848,
+                1685866573152,
+                1685866570208,
+                1685866571360,
+                1685866570464,
+                1685866570080
+              ],
+              "face_ids": [
+                1685866873248,
+                1685866872128,
+                1685866871168,
+                1685866871968,
+                1685866870848,
+                1685866871328
+              ]
+            }
+          },
+          "duration_ms": 4,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "approx",
+                "path": "output.measures.volume_mm3",
+                "value": 1000.0,
+                "rel": 0.0001
+              },
+              "passed": true,
+              "detail": "output.measures.volume_mm3 = 999.9999999999998 (want ~1000 rel 0.0001)"
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "name": "export STEP to the artifact store",
+          "command": "cad.export_step",
+          "input": {
+            "object": "cube"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M3866BSR6EFDFQTW1BQZDPZJ",
+            "step": "sha256:cee5d681e4d535aa69a3b05cf7c5d703e7e65cf6256a50c63b9438b3c917feda",
+            "size_bytes": 15361
+          },
+          "duration_ms": 166,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "present",
+                "path": "output.step"
+              },
+              "passed": true,
+              "detail": "output.step present = true"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "name": "reimport STEP artifact as a new body",
+          "command": "cad.import_step",
+          "input": {
+            "step": "sha256:cee5d681e4d535aa69a3b05cf7c5d703e7e65cf6256a50c63b9438b3c917feda",
+            "name": "cube-re"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M3866BZY6WJSN0X5W2HC0VTJ",
+            "name": "cube-re",
+            "type": "cad:body",
+            "brep": "sha256:fc9162e2b5f01c91d0eb9771333f7b4ea1715e23888c505e416f39070b8c6862",
+            "measures": {
+              "volume_mm3": 999.9999999999998,
+              "area_mm2": 599.9999999999999,
+              "bbox": {
+                "min_mm": [
+                  -1e-7,
+                  -1e-7,
+                  -1e-7
+                ],
+                "max_mm": [
+                  10.0000001,
+                  10.0000001,
+                  10.0000001
+                ]
+              },
+              "center_mm": [
+                5.0,
+                5.0,
+                5.0
+              ]
+            },
+            "topology": {
+              "solids": 1,
+              "faces": 6,
+              "edges": 12,
+              "is_solid": true,
+              "is_valid": true,
+              "edge_ids": [
+                1685867657712,
+                1685867657072,
+                1685867654768,
+                1685867652080,
+                1685867654512,
+                1685867651184,
+                1685867655408,
+                1685867653232,
+                1685867654256,
+                1685867651824,
+                1685867654384,
+                1685867658736
+              ],
+              "face_ids": [
+                1685867305344,
+                1685867308864,
+                1685867303424,
+                1685867303264,
+                1685867305504,
+                1685867309024
+              ]
+            }
+          },
+          "duration_ms": 31,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "approx",
+                "path": "output.measures.volume_mm3",
+                "value": 1000.0,
+                "rel": 0.0001
+              },
+              "passed": true,
+              "detail": "output.measures.volume_mm3 = 999.9999999999998 (want ~1000 rel 0.0001)"
+            },
+            {
+              "check": {
+                "kind": "eq",
+                "path": "output.topology.is_valid",
+                "value": true
+              },
+              "passed": true,
+              "detail": "output.topology.is_valid = Some(Bool(true)) (want Bool(true))"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "name": "save, reopen - artifact refs survive",
+          "command": "engine.save",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "saved": true
+          },
+          "duration_ms": 5894,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "name": "reopen project",
+          "command": "engine.reopen",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "reopened": "D:\\ytb_tool_temp\\.tmpjY3OZN\\cad-step-roundtrip.worldos"
+          },
+          "duration_ms": 154,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "cube-re",
+                "path": null,
+                "value": null
+              },
+              "passed": true,
+              "detail": "object `cube-re` exists"
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "name": "imported body still regenerable after reopen",
+          "command": "cad.regenerate",
+          "input": {
+            "object": "cube-re"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M3866BZY6WJSN0X5W2HC0VTJ",
+            "brep": "sha256:fc9162e2b5f01c91d0eb9771333f7b4ea1715e23888c505e416f39070b8c6862",
+            "measures": {
+              "volume_mm3": 999.9999999999998,
+              "area_mm2": 599.9999999999999,
+              "bbox": {
+                "min_mm": [
+                  -1e-7,
+                  -1e-7,
+                  -1e-7
+                ],
+                "max_mm": [
+                  10.0000001,
+                  10.0000001,
+                  10.0000001
+                ]
+              },
+              "center_mm": [
+                5.0,
+                5.0,
+                5.0
+              ]
+            },
+            "topology": {
+              "solids": 1,
+              "faces": 6,
+              "edges": 12,
+              "is_solid": true,
+              "is_valid": true,
+              "edge_ids": [
+                1685867651312,
+                1685867657968,
+                1685867658096,
+                1685867658992,
+                1685867655280,
+                1685867656176,
+                1685867658608,
+                1685867652848,
+                1685867654128,
+                1685867652592,
+                1685867658480,
+                1685867657712
+              ],
+              "face_ids": [
+                1685867306464,
+                1685867308544,
+                1685867306624,
+                1685867301824,
+                1685867308704,
+                1685867303744
+              ]
+            }
+          },
+          "duration_ms": 23,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "approx",
+                "path": "output.measures.volume_mm3",
+                "value": 1000.0,
+                "rel": 0.0001
+              },
+              "passed": true,
+              "detail": "output.measures.volume_mm3 = 999.9999999999998 (want ~1000 rel 0.0001)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "relations-cascade",
+      "title": "Relation-graph invariants, containment cascade, undo restoration",
+      "file": "07-relations-cascade.yaml",
+      "passed": true,
+      "duration_ms": 16672,
+      "steps": [
+        {
+          "index": 0,
+          "name": "assembly root",
+          "command": "object.create",
+          "input": {
+            "type": "core:folder",
+            "name": "asm"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M38674E06TQ30RZQM06PSMSE"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "history",
+                "records": 1,
+                "cursor": 1,
+                "can_undo": null,
+                "can_redo": null
+              },
+              "passed": true,
+              "detail": "records=1 cursor=1 undo=true redo=false"
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "name": "first part contained in asm",
+          "command": "object.create",
+          "input": {
+            "type": "geom:cube",
+            "name": "p1",
+            "parent": "asm"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M38674E07YEJT0E909BGB4GS"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "relation_count",
+                "count": 1,
+                "type": "core:contains",
+                "from": "asm",
+                "to": null
+              },
+              "passed": true,
+              "detail": "1 relation(s) match type=Some(\"core:contains\") from=Some(\"asm\") to=None (want 1)"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "name": "two more parts",
+          "command": "object.create",
+          "input": {
+            "type": "geom:cube",
+            "name": "p2",
+            "parent": "asm"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M38674E06VX7KRRWAZB330WW"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "relation_count",
+                "count": 2,
+                "type": "core:contains",
+                "from": "asm",
+                "to": null
+              },
+              "passed": true,
+              "detail": "2 relation(s) match type=Some(\"core:contains\") from=Some(\"asm\") to=None (want 2)"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "name": null,
+          "command": "object.create",
+          "input": {
+            "type": "geom:cube",
+            "name": "p3",
+            "parent": "asm"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M38674E1ATZYNW58QCSYGEHQ"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "relation_count",
+                "count": 3,
+                "type": "core:contains",
+                "from": "asm",
+                "to": null
+              },
+              "passed": true,
+              "detail": "3 relation(s) match type=Some(\"core:contains\") from=Some(\"asm\") to=None (want 3)"
+            },
+            {
+              "check": {
+                "kind": "no_dangling_relations"
+              },
+              "passed": true,
+              "detail": "0 dangling relation(s)"
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "name": "dependency edge between parts",
+          "command": "relation.add",
+          "input": {
+            "type": "core:depends-on",
+            "from": "p1",
+            "to": "p2"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M38674E1T3G8A9TZJ2D01NA3"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "relation_count",
+                "count": 1,
+                "type": "core:depends-on",
+                "from": null,
+                "to": null
+              },
+              "passed": true,
+              "detail": "1 relation(s) match type=Some(\"core:depends-on\") from=None to=None (want 1)"
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "name": "decision references two parts",
+          "command": "decision.record",
+          "input": {
+            "name": "d1",
+            "choice": "aluminum",
+            "rationale": "weight budget",
+            "affects": [
+              "p1",
+              "p3"
+            ]
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M38674E1WT7ZZWH2G8JVN0NT"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "relation_count",
+                "count": 2,
+                "type": "core:references",
+                "from": "d1",
+                "to": null
+              },
+              "passed": true,
+              "detail": "2 relation(s) match type=Some(\"core:references\") from=Some(\"d1\") to=None (want 2)"
+            }
+          ]
+        },
+        {
+          "index": 6,
+          "name": "graph totals via the inspect capability",
+          "command": "capability.run",
+          "input": {
+            "id": "project.inspect",
+            "input": {}
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M3866M51FB5197Y40EPFXXD5",
+            "name": "relations-cascade",
+            "schema_version": 1,
+            "object_count": 5,
+            "relation_count": 6,
+            "types": {
+              "geom:cube": 3,
+              "core:decision": 1,
+              "core:folder": 1
+            },
+            "roots": [
+              {
+                "id": "01M38674E1WT7ZZWH2G8JVN0NT",
+                "name": "d1",
+                "type": "core:decision"
+              },
+              {
+                "id": "01M38674E06TQ30RZQM06PSMSE",
+                "name": "asm",
+                "type": "core:folder"
+              }
+            ]
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "eq",
+                "path": "output.object_count",
+                "value": 5
+              },
+              "passed": true,
+              "detail": "output.object_count = Some(Number(5)) (want Number(5))"
+            },
+            {
+              "check": {
+                "kind": "eq",
+                "path": "output.relation_count",
+                "value": 6
+              },
+              "passed": true,
+              "detail": "output.relation_count = Some(Number(6)) (want Number(6))"
+            },
+            {
+              "check": {
+                "kind": "valid",
+                "max_warnings": null
+              },
+              "passed": true,
+              "detail": "0 error(s), 0 warning(s)"
+            }
+          ]
+        },
+        {
+          "index": 7,
+          "name": "deleting a part cleans its edges",
+          "command": "object.delete",
+          "input": {
+            "name": "p2"
+          },
+          "status": "ok",
+          "output": {
+            "deleted": [
+              {
+                "id": "01M38674E06VX7KRRWAZB330WW",
+                "name": "p2"
+              }
+            ]
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_absent",
+                "name": "p2"
+              },
+              "passed": true,
+              "detail": "object `p2` absent = true"
+            },
+            {
+              "check": {
+                "kind": "relation_count",
+                "count": 0,
+                "type": "core:depends-on",
+                "from": null,
+                "to": null
+              },
+              "passed": true,
+              "detail": "0 relation(s) match type=Some(\"core:depends-on\") from=None to=None (want 0)"
+            },
+            {
+              "check": {
+                "kind": "relation_count",
+                "count": 2,
+                "type": "core:contains",
+                "from": "asm",
+                "to": null
+              },
+              "passed": true,
+              "detail": "2 relation(s) match type=Some(\"core:contains\") from=Some(\"asm\") to=None (want 2)"
+            },
+            {
+              "check": {
+                "kind": "no_dangling_relations"
+              },
+              "passed": true,
+              "detail": "0 dangling relation(s)"
+            },
+            {
+              "check": {
+                "kind": "valid",
+                "max_warnings": null
+              },
+              "passed": true,
+              "detail": "0 error(s), 0 warning(s)"
+            }
+          ]
+        },
+        {
+          "index": 8,
+          "name": "cascade delete removes the subtree",
+          "command": "object.delete",
+          "input": {
+            "name": "asm",
+            "cascade": true
+          },
+          "status": "ok",
+          "output": {
+            "deleted": [
+              {
+                "id": "01M38674E1ATZYNW58QCSYGEHQ",
+                "name": "p3"
+              },
+              {
+                "id": "01M38674E07YEJT0E909BGB4GS",
+                "name": "p1"
+              },
+              {
+                "id": "01M38674E06TQ30RZQM06PSMSE",
+                "name": "asm"
+              }
+            ]
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_absent",
+                "name": "p1"
+              },
+              "passed": true,
+              "detail": "object `p1` absent = true"
+            },
+            {
+              "check": {
+                "kind": "query_absent",
+                "name": "p3"
+              },
+              "passed": true,
+              "detail": "object `p3` absent = true"
+            },
+            {
+              "check": {
+                "kind": "object_count",
+                "count": 1,
+                "type": null
+              },
+              "passed": true,
+              "detail": "1 object(s) (want 1)"
+            },
+            {
+              "check": {
+                "kind": "no_dangling_relations"
+              },
+              "passed": true,
+              "detail": "0 dangling relation(s)"
+            },
+            {
+              "check": {
+                "kind": "valid",
+                "max_warnings": null
+              },
+              "passed": true,
+              "detail": "0 error(s), 0 warning(s)"
+            }
+          ]
+        },
+        {
+          "index": 9,
+          "name": "undo restores the subtree and its edges",
+          "command": "engine.undo",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "undone": "01M38674E1EC627EDX3WHKR2VT"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "object_count",
+                "count": 4,
+                "type": null
+              },
+              "passed": true,
+              "detail": "4 object(s) (want 4)"
+            },
+            {
+              "check": {
+                "kind": "relation_count",
+                "count": 2,
+                "type": "core:contains",
+                "from": "asm",
+                "to": null
+              },
+              "passed": true,
+              "detail": "2 relation(s) match type=Some(\"core:contains\") from=Some(\"asm\") to=None (want 2)"
+            },
+            {
+              "check": {
+                "kind": "relation_count",
+                "count": 2,
+                "type": "core:references",
+                "from": "d1",
+                "to": null
+              },
+              "passed": true,
+              "detail": "2 relation(s) match type=Some(\"core:references\") from=Some(\"d1\") to=None (want 2)"
+            },
+            {
+              "check": {
+                "kind": "no_dangling_relations"
+              },
+              "passed": true,
+              "detail": "0 dangling relation(s)"
+            },
+            {
+              "check": {
+                "kind": "valid",
+                "max_warnings": null
+              },
+              "passed": true,
+              "detail": "0 error(s), 0 warning(s)"
+            }
+          ]
+        },
+        {
+          "index": 10,
+          "name": "undoing the part delete restores its dependency edge",
+          "command": "engine.undo",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "undone": "01M38674E19TV0VY20V5C8Z80K"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "object_count",
+                "count": 5,
+                "type": null
+              },
+              "passed": true,
+              "detail": "5 object(s) (want 5)"
+            },
+            {
+              "check": {
+                "kind": "relation_count",
+                "count": 1,
+                "type": "core:depends-on",
+                "from": "p1",
+                "to": "p2"
+              },
+              "passed": true,
+              "detail": "1 relation(s) match type=Some(\"core:depends-on\") from=Some(\"p1\") to=Some(\"p2\") (want 1)"
+            },
+            {
+              "check": {
+                "kind": "no_dangling_relations"
+              },
+              "passed": true,
+              "detail": "0 dangling relation(s)"
+            },
+            {
+              "check": {
+                "kind": "valid",
+                "max_warnings": null
+              },
+              "passed": true,
+              "detail": "0 error(s), 0 warning(s)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "requirements-staleness",
+      "title": "Requirement evaluation writes status + depends-on edges; edits stale them",
+      "file": "08-requirements.yaml",
+      "passed": true,
+      "duration_ms": 21820,
+      "steps": [
+        {
+          "index": 0,
+          "name": "cube the requirement reads",
+          "command": "geometry.create_primitive",
+          "input": {
+            "kind": "cube",
+            "name": "block",
+            "size": 10
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M3867T1VGASBWT0D85DB9Y0N"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "object_count",
+                "count": 1,
+                "type": "geom:cube"
+              },
+              "passed": true,
+              "detail": "1 object(s) of type `geom:cube` (want 1)"
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "name": "requirement on cube volume, claimed satisfied by it",
+          "command": "requirement.create",
+          "input": {
+            "name": "req-volume",
+            "expression": "volume(\"block\") >= 1000",
+            "satisfied_by": "block"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M3867T1V6VV9AZ1PREVQXY4A"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "req-volume",
+                "path": "core:requirement-status.status",
+                "value": "unknown"
+              },
+              "passed": true,
+              "detail": "`req-volume` core:requirement-status.status = Some(String(\"unknown\")) (want String(\"unknown\"))"
+            },
+            {
+              "check": {
+                "kind": "relation_count",
+                "count": 1,
+                "type": "core:satisfies",
+                "from": "block",
+                "to": "req-volume"
+              },
+              "passed": true,
+              "detail": "1 relation(s) match type=Some(\"core:satisfies\") from=Some(\"block\") to=Some(\"req-volume\") (want 1)"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "name": "evaluate → pass, dependency edge materializes",
+          "command": "requirement.evaluate",
+          "input": {
+            "name": "req-volume"
+          },
+          "status": "ok",
+          "output": {
+            "results": [
+              {
+                "id": "01M3867T1V6VV9AZ1PREVQXY4A",
+                "status": "pass",
+                "verdict": "`volume(\"block\") >= 1000` satisfied",
+                "depends_on": [
+                  "01M3867T1VGASBWT0D85DB9Y0N"
+                ]
+              }
+            ]
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "eq",
+                "path": "output.results.0.status",
+                "value": "pass"
+              },
+              "passed": true,
+              "detail": "output.results.0.status = Some(String(\"pass\")) (want String(\"pass\"))"
+            },
+            {
+              "check": {
+                "kind": "relation_count",
+                "count": 1,
+                "type": "core:depends-on",
+                "from": "req-volume",
+                "to": "block"
+              },
+              "passed": true,
+              "detail": "1 relation(s) match type=Some(\"core:depends-on\") from=Some(\"req-volume\") to=Some(\"block\") (want 1)"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "req-volume",
+                "path": "core:requirement-status.status",
+                "value": "pass"
+              },
+              "passed": true,
+              "detail": "`req-volume` core:requirement-status.status = Some(String(\"pass\")) (want String(\"pass\"))"
+            },
+            {
+              "check": {
+                "kind": "valid",
+                "max_warnings": null
+              },
+              "passed": true,
+              "detail": "0 error(s), 0 warning(s)"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "name": "touching the depended-on object stales the requirement",
+          "command": "geometry.transform",
+          "input": {
+            "name": "block",
+            "translate": [
+              1,
+              0,
+              0
+            ]
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M3867T1VGASBWT0D85DB9Y0N",
+            "transform": {
+              "position": [
+                1.0,
+                0.0,
+                0.0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "req-volume",
+                "path": "core:requirement-status.status",
+                "value": "stale"
+              },
+              "passed": true,
+              "detail": "`req-volume` core:requirement-status.status = Some(String(\"stale\")) (want String(\"stale\"))"
+            },
+            {
+              "check": {
+                "kind": "valid",
+                "max_warnings": 1
+              },
+              "passed": true,
+              "detail": "0 error(s), 1 warning(s) (max 1)"
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "name": "re-evaluate clears staleness",
+          "command": "requirement.evaluate",
+          "input": {
+            "name": "req-volume"
+          },
+          "status": "ok",
+          "output": {
+            "results": [
+              {
+                "id": "01M3867T1V6VV9AZ1PREVQXY4A",
+                "status": "pass",
+                "verdict": "`volume(\"block\") >= 1000` satisfied",
+                "depends_on": [
+                  "01M3867T1VGASBWT0D85DB9Y0N"
+                ]
+              }
+            ]
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "eq",
+                "path": "output.results.0.status",
+                "value": "pass"
+              },
+              "passed": true,
+              "detail": "output.results.0.status = Some(String(\"pass\")) (want String(\"pass\"))"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "req-volume",
+                "path": "core:requirement-status.status",
+                "value": "pass"
+              },
+              "passed": true,
+              "detail": "`req-volume` core:requirement-status.status = Some(String(\"pass\")) (want String(\"pass\"))"
+            },
+            {
+              "check": {
+                "kind": "valid",
+                "max_warnings": null
+              },
+              "passed": true,
+              "detail": "0 error(s), 0 warning(s)"
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "name": "a failing requirement reports honestly",
+          "command": "requirement.create",
+          "input": {
+            "name": "req-impossible",
+            "expression": "count(geom:sphere) >= 5"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M3867T1W48E9RR381Z05C448"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            }
+          ]
+        },
+        {
+          "index": 6,
+          "name": "evaluate-all surfaces the failure on the object",
+          "command": "requirement.evaluate",
+          "input": {
+            "all": true
+          },
+          "status": "ok",
+          "output": {
+            "results": [
+              {
+                "id": "01M3867T1W48E9RR381Z05C448",
+                "status": "fail",
+                "verdict": "`count(geom:sphere) >= 5` not satisfied",
+                "depends_on": []
+              },
+              {
+                "id": "01M3867T1V6VV9AZ1PREVQXY4A",
+                "status": "pass",
+                "verdict": "`volume(\"block\") >= 1000` satisfied",
+                "depends_on": [
+                  "01M3867T1VGASBWT0D85DB9Y0N"
+                ]
+              }
+            ]
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "req-impossible",
+                "path": "core:requirement-status.status",
+                "value": "fail"
+              },
+              "passed": true,
+              "detail": "`req-impossible` core:requirement-status.status = Some(String(\"fail\")) (want String(\"fail\"))"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "req-volume",
+                "path": "core:requirement-status.status",
+                "value": "pass"
+              },
+              "passed": true,
+              "detail": "`req-volume` core:requirement-status.status = Some(String(\"pass\")) (want String(\"pass\"))"
+            }
+          ]
+        },
+        {
+          "index": 7,
+          "name": "undo of the evaluation restores prior statuses",
+          "command": "engine.undo",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "undone": "01M3867T1WB95ZB271RJRP2GXK"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "req-impossible",
+                "path": "core:requirement-status.status",
+                "value": "unknown"
+              },
+              "passed": true,
+              "detail": "`req-impossible` core:requirement-status.status = Some(String(\"unknown\")) (want String(\"unknown\"))"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "req-volume",
+                "path": "core:requirement-status.status",
+                "value": "pass"
+              },
+              "passed": true,
+              "detail": "`req-volume` core:requirement-status.status = Some(String(\"pass\")) (want String(\"pass\"))"
+            },
+            {
+              "check": {
+                "kind": "no_dangling_relations"
+              },
+              "passed": true,
+              "detail": "0 dangling relation(s)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mesh-roundtrip",
+      "title": "Primitive → mesh export → digest check → import → measured geom:mesh",
+      "file": "09-mesh-roundtrip.yaml",
+      "passed": true,
+      "duration_ms": 42922,
+      "steps": [
+        {
+          "index": 0,
+          "name": "10mm cube primitive",
+          "command": "geometry.create_primitive",
+          "input": {
+            "kind": "cube",
+            "name": "proto-cube",
+            "size": 10
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M3868X7W115B8CVCH3DTZ1PR"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "proto-cube",
+                "path": null,
+                "value": null
+              },
+              "passed": true,
+              "detail": "object `proto-cube` exists"
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "name": "export binary STL into the task tempdir",
+          "command": "geometry.export",
+          "input": {
+            "name": "proto-cube",
+            "path": "D:\\ytb_tool_temp\\.tmpZWdbBS/proto-cube.stl",
+            "format": "stl"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M3868X7W115B8CVCH3DTZ1PR",
+            "name": "proto-cube",
+            "path": "D:\\ytb_tool_temp\\.tmpZWdbBS/proto-cube.stl",
+            "format": "stl",
+            "triangles": 12,
+            "bytes": 684,
+            "sha256": "sha256:3a375b84e1339b771d8bee9e967f1c089dc89b40d1fc069a972933305c30bb15"
+          },
+          "duration_ms": 1386,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "eq",
+                "path": "output.triangles",
+                "value": 12
+              },
+              "passed": true,
+              "detail": "output.triangles = Some(Number(12)) (want Number(12))"
+            },
+            {
+              "check": {
+                "kind": "present",
+                "path": "output.sha256"
+              },
+              "passed": true,
+              "detail": "output.sha256 present = true"
+            },
+            {
+              "check": {
+                "kind": "file_digest",
+                "path": "${bench.dir}/proto-cube.stl",
+                "sha256": null,
+                "sha256_path": "output.sha256"
+              },
+              "passed": true,
+              "detail": "`D:\\ytb_tool_temp\\.tmpZWdbBS/proto-cube.stl` sha256 sha256:3a375b84e1339b771d8bee9e967f1c089dc89b40d1fc069a972933305c30bb15 (want sha256:3a375b84e1339b771d8bee9e967f1c089dc89b40d1fc069a972933305c30bb15)"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "name": "export OBJ too",
+          "command": "geometry.export",
+          "input": {
+            "name": "proto-cube",
+            "path": "D:\\ytb_tool_temp\\.tmpZWdbBS/proto-cube.obj",
+            "format": "obj"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M3868X7W115B8CVCH3DTZ1PR",
+            "name": "proto-cube",
+            "path": "D:\\ytb_tool_temp\\.tmpZWdbBS/proto-cube.obj",
+            "format": "obj",
+            "triangles": 12,
+            "bytes": 198,
+            "sha256": "sha256:c374bd962ec81a2f2a5592792295802b73e615c9ea8c6e9293574407fad0eec1"
+          },
+          "duration_ms": 5701,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "file_digest",
+                "path": "${bench.dir}/proto-cube.obj",
+                "sha256": null,
+                "sha256_path": "output.sha256"
+              },
+              "passed": true,
+              "detail": "`D:\\ytb_tool_temp\\.tmpZWdbBS/proto-cube.obj` sha256 sha256:c374bd962ec81a2f2a5592792295802b73e615c9ea8c6e9293574407fad0eec1 (want sha256:c374bd962ec81a2f2a5592792295802b73e615c9ea8c6e9293574407fad0eec1)"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "name": "exports never overwrite",
+          "command": "geometry.export",
+          "input": {
+            "name": "proto-cube",
+            "path": "D:\\ytb_tool_temp\\.tmpZWdbBS/proto-cube.stl",
+            "format": "stl"
+          },
+          "status": "ok",
+          "output": {
+            "error": "command failed: cannot create `D:\\ytb_tool_temp\\.tmpZWdbBS/proto-cube.stl` (existing files are never overwritten): The file exists. (os error 80)"
+          },
+          "duration_ms": 2,
+          "checks": [
+            {
+              "check": {
+                "kind": "error",
+                "contains": "never overwritten"
+              },
+              "passed": true,
+              "detail": "error `command failed: cannot create `D:\\ytb_tool_temp\\.tmpZWdbBS/proto-cube.stl` (existing files are never overwritten): The file exists. (os error 80)` contains `never overwritten`"
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "name": "traversal guard rejects `..`",
+          "command": "geometry.export",
+          "input": {
+            "name": "proto-cube",
+            "path": "../escape.stl"
+          },
+          "status": "ok",
+          "output": {
+            "error": "command failed: path traversal (`..`) is not allowed"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "error",
+                "contains": "traversal"
+              },
+              "passed": true,
+              "detail": "error `command failed: path traversal (`..`) is not allowed` contains `traversal`"
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "name": "import the STL back as geom:mesh",
+          "command": "geometry.import",
+          "input": {
+            "path": "D:\\ytb_tool_temp\\.tmpZWdbBS/proto-cube.stl",
+            "name": "cube-mesh"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M386945GA0ZCMEQ6MD4PWD87",
+            "name": "cube-mesh",
+            "type": "geom:mesh",
+            "path": "D:\\ytb_tool_temp\\.tmpZWdbBS/proto-cube.stl",
+            "format": "stl",
+            "vertices": 8,
+            "triangles": 12,
+            "bytes": 684,
+            "sha256": "sha256:3a375b84e1339b771d8bee9e967f1c089dc89b40d1fc069a972933305c30bb15"
+          },
+          "duration_ms": 1,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "eq",
+                "path": "output.triangles",
+                "value": 12
+              },
+              "passed": true,
+              "detail": "output.triangles = Some(Number(12)) (want Number(12))"
+            },
+            {
+              "check": {
+                "kind": "eq",
+                "path": "output.type",
+                "value": "geom:mesh"
+              },
+              "passed": true,
+              "detail": "output.type = Some(String(\"geom:mesh\")) (want String(\"geom:mesh\"))"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "cube-mesh",
+                "path": "geom:mesh.source.sha256",
+                "value": "${cube_stl.sha256}"
+              },
+              "passed": true,
+              "detail": "`cube-mesh` geom:mesh.source.sha256 = Some(String(\"sha256:3a375b84e1339b771d8bee9e967f1c089dc89b40d1fc069a972933305c30bb15\")) (want String(\"sha256:3a375b84e1339b771d8bee9e967f1c089dc89b40d1fc069a972933305c30bb15\"))"
+            }
+          ]
+        },
+        {
+          "index": 6,
+          "name": "mesh measures like the primitive it came from",
+          "command": "capability.run",
+          "input": {
+            "id": "geometry.measure",
+            "input": {
+              "name": "cube-mesh"
+            }
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M386945GA0ZCMEQ6MD4PWD87",
+            "kind": "mesh",
+            "dimensions": [
+              10.0,
+              10.0,
+              10.0
+            ],
+            "bbox": {
+              "min": [
+                -5.0,
+                -5.0,
+                -5.0
+              ],
+              "max": [
+                5.0,
+                5.0,
+                5.0
+              ]
+            },
+            "volume": 1000.0,
+            "surface_area": 600.0,
+            "vertices": 8,
+            "triangles": 12
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "eq",
+                "path": "output.kind",
+                "value": "mesh"
+              },
+              "passed": true,
+              "detail": "output.kind = Some(String(\"mesh\")) (want String(\"mesh\"))"
+            },
+            {
+              "check": {
+                "kind": "approx",
+                "path": "output.volume",
+                "value": 1000.0,
+                "rel": 0.0001
+              },
+              "passed": true,
+              "detail": "output.volume = 1000 (want ~1000 rel 0.0001)"
+            },
+            {
+              "check": {
+                "kind": "approx",
+                "path": "output.surface_area",
+                "value": 600.0,
+                "rel": 0.0001
+              },
+              "passed": true,
+              "detail": "output.surface_area = 600 (want ~600 rel 0.0001)"
+            }
+          ]
+        },
+        {
+          "index": 7,
+          "name": "a B-rep body refuses the mesh-export path",
+          "command": "cad.create_box",
+          "input": {
+            "size_mm": 5,
+            "name": "solid"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M386945QG9754B2WRP43SZ96",
+            "name": "solid",
+            "type": "cad:body",
+            "brep": "sha256:7e7f0029bbdf4d60c475a1fbfdf88479ead99b83403c105fd4fe2285bbe8bdee",
+            "measures": {
+              "volume_mm3": 124.99999999999997,
+              "area_mm2": 149.99999999999997,
+              "bbox": {
+                "min_mm": [
+                  -1e-7,
+                  -1e-7,
+                  -1e-7
+                ],
+                "max_mm": [
+                  5.0000001,
+                  5.0000001,
+                  5.0000001
+                ]
+              },
+              "center_mm": [
+                2.5,
+                2.5,
+                2.5
+              ]
+            },
+            "topology": {
+              "solids": 1,
+              "faces": 6,
+              "edges": 12,
+              "is_solid": true,
+              "is_valid": true,
+              "edge_ids": [
+                1685867658096,
+                1685867652080,
+                1685867654000,
+                1685867651184,
+                1685867657328,
+                1685867651312,
+                1685867654128,
+                1685867657456,
+                1685867657584,
+                1685867654896,
+                1685867652208,
+                1685867652464
+              ],
+              "face_ids": [
+                1685867301504,
+                1685867301664,
+                1685867306784,
+                1685867303264,
+                1685867306304,
+                1685867307264
+              ]
+            }
+          },
+          "duration_ms": 6,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            }
+          ]
+        },
+        {
+          "index": 8,
+          "name": "geometry.export on a cad:body fails cleanly",
+          "command": "geometry.export",
+          "input": {
+            "object": "solid",
+            "path": "D:\\ytb_tool_temp\\.tmpZWdbBS/solid.stl"
+          },
+          "status": "ok",
+          "output": {
+            "error": "command failed: cad:body is a B-rep — use cad.export_stl + `worldos artifact export`"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "error",
+                "contains": "B-rep"
+              },
+              "passed": true,
+              "detail": "error `command failed: cad:body is a B-rep — use cad.export_stl + `worldos artifact export`` contains `B-rep`"
+            },
+            {
+              "check": {
+                "kind": "valid",
+                "max_warnings": null
+              },
+              "passed": true,
+              "detail": "0 error(s), 0 warning(s)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "agent-rollback",
+      "title": "agent.run commits as one transaction; a failed run leaves zero residue",
+      "file": "10-agent-rollback.yaml",
+      "passed": true,
+      "duration_ms": 36338,
+      "steps": [
+        {
+          "index": 0,
+          "name": "empty baseline",
+          "command": "capability.run",
+          "input": {
+            "id": "project.inspect",
+            "input": {}
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M38695R9B1VJC09JED983EAH",
+            "name": "agent-rollback",
+            "schema_version": 1,
+            "object_count": 0,
+            "relation_count": 0,
+            "types": {},
+            "roots": []
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "eq",
+                "path": "output.object_count",
+                "value": 0
+              },
+              "passed": true,
+              "detail": "output.object_count = Some(Number(0)) (want Number(0))"
+            },
+            {
+              "check": {
+                "kind": "snapshot",
+                "save": "pristine",
+                "eq": null
+              },
+              "passed": true,
+              "detail": "state digest sha256:8d9492a553bfe3ddb8ac2f8d6fbdd2283a48df76a806eedff7a218e2e609ff0b"
+            },
+            {
+              "check": {
+                "kind": "history",
+                "records": 0,
+                "cursor": 0,
+                "can_undo": false,
+                "can_redo": null
+              },
+              "passed": true,
+              "detail": "records=0 cursor=0 undo=false redo=false"
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "name": "agent creates a cube under a declared predicate",
+          "command": "capability.run",
+          "input": {
+            "id": "agent.run",
+            "input": {
+              "goal": "create a cube named housing",
+              "done_when": "exists_named(\"housing\")",
+              "max_iterations": 4
+            }
+          },
+          "status": "ok",
+          "output": {
+            "run_id": "01M386A97FZEVG2QSSCFQB7J37",
+            "agent": "assistant",
+            "goal": "create a cube named housing",
+            "status": "succeeded",
+            "steps": [
+              {
+                "index": 0,
+                "command": "geometry.create_primitive",
+                "input": {
+                  "kind": "cube",
+                  "name": "housing"
+                },
+                "note": "create cube",
+                "ok": true,
+                "output": {
+                  "id": "01M386A97JFRRDT98E2QATEXJG"
+                }
+              }
+            ],
+            "created_objects": [
+              "01M386A97JFRRDT98E2QATEXJG"
+            ],
+            "verification": [
+              "verified object housing (geom:cube, 01M386A97JFRRDT98E2QATEXJG)",
+              "goal predicate `exists_named(\"housing\")` satisfied: `exists_named(\"housing\")` satisfied"
+            ],
+            "summary": "goal predicate satisfied after 1 iteration(s); 1 command(s) succeeded; 1 object(s) affected",
+            "iterations": 1,
+            "done_when": "exists_named(\"housing\")"
+          },
+          "duration_ms": 5,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "eq",
+                "path": "output.status",
+                "value": "succeeded"
+              },
+              "passed": true,
+              "detail": "output.status = Some(String(\"succeeded\")) (want String(\"succeeded\"))"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "housing",
+                "path": null,
+                "value": null
+              },
+              "passed": true,
+              "detail": "object `housing` exists"
+            },
+            {
+              "check": {
+                "kind": "object_count",
+                "count": 2,
+                "type": null
+              },
+              "passed": true,
+              "detail": "2 object(s) (want 2)"
+            },
+            {
+              "check": {
+                "kind": "object_count",
+                "count": 1,
+                "type": "core:agent-task"
+              },
+              "passed": true,
+              "detail": "1 object(s) of type `core:agent-task` (want 1)"
+            },
+            {
+              "check": {
+                "kind": "history",
+                "records": 1,
+                "cursor": null,
+                "can_undo": true,
+                "can_redo": false
+              },
+              "passed": true,
+              "detail": "records=1 cursor=1 undo=true redo=false"
+            },
+            {
+              "check": {
+                "kind": "no_dangling_relations"
+              },
+              "passed": true,
+              "detail": "0 dangling relation(s)"
+            },
+            {
+              "check": {
+                "kind": "valid",
+                "max_warnings": null
+              },
+              "passed": true,
+              "detail": "0 error(s), 0 warning(s)"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "name": "undo reverts the whole run at once",
+          "command": "engine.undo",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "undone": "01M386A97FFY4RDE9MQ54RW4RE"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "snapshot",
+                "save": null,
+                "eq": "pristine"
+              },
+              "passed": true,
+              "detail": "state digest matches `pristine` (sha256:8d9492a553bfe3ddb8ac2f8d6fbdd2283a48df76a806eedff7a218e2e609ff0b)"
+            },
+            {
+              "check": {
+                "kind": "history",
+                "records": 1,
+                "cursor": 0,
+                "can_undo": null,
+                "can_redo": true
+              },
+              "passed": true,
+              "detail": "records=1 cursor=0 undo=false redo=true"
+            },
+            {
+              "check": {
+                "kind": "object_count",
+                "count": 0,
+                "type": null
+              },
+              "passed": true,
+              "detail": "0 object(s) (want 0)"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "name": "redo puts the whole run back",
+          "command": "engine.redo",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "redone": "01M386A97FFY4RDE9MQ54RW4RE"
+          },
+          "duration_ms": 1,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "housing",
+                "path": null,
+                "value": null
+              },
+              "passed": true,
+              "detail": "object `housing` exists"
+            },
+            {
+              "check": {
+                "kind": "object_count",
+                "count": 2,
+                "type": null
+              },
+              "passed": true,
+              "detail": "2 object(s) (want 2)"
+            },
+            {
+              "check": {
+                "kind": "snapshot",
+                "save": "before_doom",
+                "eq": null
+              },
+              "passed": true,
+              "detail": "state digest sha256:ffb9f7bdafcaecdc8e8367bcd9d8ae7fedc049ef23474c3f7975eeea121fb88b"
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "name": "unsatisfiable predicate → honest failure, full rollback",
+          "command": "capability.run",
+          "input": {
+            "id": "agent.run",
+            "input": {
+              "goal": "create a sphere named ball",
+              "done_when": "exists_named(\"ghost\")",
+              "max_iterations": 2,
+              "max_commands": 8
+            }
+          },
+          "status": "ok",
+          "output": {
+            "run_id": "01M386A97QJ709NADHVPTW9Z7R",
+            "agent": "assistant",
+            "goal": "create a sphere named ball",
+            "status": "failed",
+            "steps": [
+              {
+                "index": 0,
+                "command": "geometry.create_primitive",
+                "input": {
+                  "kind": "sphere",
+                  "name": "ball"
+                },
+                "note": "create sphere",
+                "ok": true,
+                "output": {
+                  "id": "01M386A97SXNAW0EHYX45ZWVY7"
+                }
+              },
+              {
+                "index": 1,
+                "command": "geometry.create_primitive",
+                "input": {
+                  "kind": "sphere",
+                  "name": "ball"
+                },
+                "note": "create sphere",
+                "ok": true,
+                "output": {
+                  "id": "01M386A97T9WQQW43QEXVHMY62"
+                }
+              }
+            ],
+            "created_objects": [],
+            "verification": [
+              "verified object ball (geom:sphere, 01M386A97SXNAW0EHYX45ZWVY7)",
+              "verified object ball (geom:sphere, 01M386A97T9WQQW43QEXVHMY62)"
+            ],
+            "summary": "iteration cap 2 reached; goal still unsatisfied (last check: `exists_named(\"ghost\")` not satisfied)",
+            "iterations": 2,
+            "done_when": "exists_named(\"ghost\")"
+          },
+          "duration_ms": 4,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "eq",
+                "path": "output.status",
+                "value": "failed"
+              },
+              "passed": true,
+              "detail": "output.status = Some(String(\"failed\")) (want String(\"failed\"))"
+            },
+            {
+              "check": {
+                "kind": "query_absent",
+                "name": "ball"
+              },
+              "passed": true,
+              "detail": "object `ball` absent = true"
+            },
+            {
+              "check": {
+                "kind": "snapshot",
+                "save": null,
+                "eq": "before_doom"
+              },
+              "passed": true,
+              "detail": "state digest matches `before_doom` (sha256:ffb9f7bdafcaecdc8e8367bcd9d8ae7fedc049ef23474c3f7975eeea121fb88b)"
+            },
+            {
+              "check": {
+                "kind": "history",
+                "records": 1,
+                "cursor": null,
+                "can_undo": null,
+                "can_redo": null
+              },
+              "passed": true,
+              "detail": "records=1 cursor=1 undo=true redo=false"
+            },
+            {
+              "check": {
+                "kind": "no_dangling_relations"
+              },
+              "passed": true,
+              "detail": "0 dangling relation(s)"
+            },
+            {
+              "check": {
+                "kind": "valid",
+                "max_warnings": null
+              },
+              "passed": true,
+              "detail": "0 error(s), 0 warning(s)"
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "name": "unsupported goal is a clean no-op, not a failure",
+          "command": "capability.run",
+          "input": {
+            "id": "agent.run",
+            "input": {
+              "goal": "frobnicate the splines"
+            }
+          },
+          "status": "ok",
+          "output": {
+            "run_id": "01M386A97VCRDF6R0H08B6SRCS",
+            "agent": "assistant",
+            "goal": "frobnicate the splines",
+            "status": "unsupported",
+            "steps": [],
+            "created_objects": [],
+            "verification": [],
+            "summary": "unsupported goal `frobnicate the splines`. create <cube|sphere|cylinder|plane|note|code file> [named X] [next to Y]; rename X to Y; move X to [x,y,z]; delete X; evaluate requirements; list/inspect project",
+            "iterations": 0
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "eq",
+                "path": "output.status",
+                "value": "unsupported"
+              },
+              "passed": true,
+              "detail": "output.status = Some(String(\"unsupported\")) (want String(\"unsupported\"))"
+            },
+            {
+              "check": {
+                "kind": "snapshot",
+                "save": null,
+                "eq": "before_doom"
+              },
+              "passed": true,
+              "detail": "state digest matches `before_doom` (sha256:ffb9f7bdafcaecdc8e8367bcd9d8ae7fedc049ef23474c3f7975eeea121fb88b)"
+            },
+            {
+              "check": {
+                "kind": "history",
+                "records": 1,
+                "cursor": null,
+                "can_undo": null,
+                "can_redo": null
+              },
+              "passed": true,
+              "detail": "records=1 cursor=1 undo=true redo=false"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "history-reopen",
+      "title": "Undo position, redo tail and journal survive save/reopen",
+      "file": "11-history-reopen.yaml",
+      "passed": true,
+      "duration_ms": 77081,
+      "steps": [
+        {
+          "index": 0,
+          "name": "create A",
+          "command": "object.create",
+          "input": {
+            "type": "core:note",
+            "name": "alpha"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M386CEBTHEC1Y48H047K55WJ"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "history",
+                "records": 1,
+                "cursor": 1,
+                "can_undo": null,
+                "can_redo": null
+              },
+              "passed": true,
+              "detail": "records=1 cursor=1 undo=true redo=false"
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "name": "create B",
+          "command": "object.create",
+          "input": {
+            "type": "core:note",
+            "name": "beta"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M386CEBTRPBNKVC5FVA1T9E5"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "history",
+                "records": 2,
+                "cursor": 2,
+                "can_undo": null,
+                "can_redo": null
+              },
+              "passed": true,
+              "detail": "records=2 cursor=2 undo=true redo=false"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "name": "undo B — a redo tail now exists",
+          "command": "engine.undo",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "undone": "01M386CEBT81WVSQZS9F8G8EN3"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "history",
+                "records": 2,
+                "cursor": 1,
+                "can_undo": true,
+                "can_redo": true
+              },
+              "passed": true,
+              "detail": "records=2 cursor=1 undo=true redo=true"
+            },
+            {
+              "check": {
+                "kind": "snapshot",
+                "save": "undone",
+                "eq": null
+              },
+              "passed": true,
+              "detail": "state digest sha256:b1482e00bf3087de3c0c815afaeb408eec4d87aa41d3e0a5d1c9baf03cfc0525"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "name": "save with the redo tail pending",
+          "command": "engine.save",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "saved": true
+          },
+          "duration_ms": 7320,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "name": "reopen keeps the cursor mid-history",
+          "command": "engine.reopen",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "reopened": "D:\\ytb_tool_temp\\.tmpjQa06C\\history-reopen.worldos"
+          },
+          "duration_ms": 10,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "history",
+                "records": 2,
+                "cursor": 1,
+                "can_undo": true,
+                "can_redo": true
+              },
+              "passed": true,
+              "detail": "records=2 cursor=1 undo=true redo=true"
+            },
+            {
+              "check": {
+                "kind": "snapshot",
+                "save": null,
+                "eq": "undone"
+              },
+              "passed": true,
+              "detail": "state digest matches `undone` (sha256:b1482e00bf3087de3c0c815afaeb408eec4d87aa41d3e0a5d1c9baf03cfc0525)"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "alpha",
+                "path": null,
+                "value": null
+              },
+              "passed": true,
+              "detail": "object `alpha` exists"
+            },
+            {
+              "check": {
+                "kind": "query_absent",
+                "name": "beta"
+              },
+              "passed": true,
+              "detail": "object `beta` absent = true"
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "name": "redo after reopen restores B",
+          "command": "engine.redo",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "redone": "01M386CEBT81WVSQZS9F8G8EN3"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "beta",
+                "path": null,
+                "value": null
+              },
+              "passed": true,
+              "detail": "object `beta` exists"
+            },
+            {
+              "check": {
+                "kind": "history",
+                "records": 2,
+                "cursor": 2,
+                "can_undo": null,
+                "can_redo": false
+              },
+              "passed": true,
+              "detail": "records=2 cursor=2 undo=true redo=false"
+            }
+          ]
+        },
+        {
+          "index": 6,
+          "name": "undo everything",
+          "command": "engine.undo",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "undone": "01M386CEBT81WVSQZS9F8G8EN3"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_absent",
+                "name": "beta"
+              },
+              "passed": true,
+              "detail": "object `beta` absent = true"
+            }
+          ]
+        },
+        {
+          "index": 7,
+          "name": null,
+          "command": "engine.undo",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "undone": "01M386CEBTQ8B3JF4MKJVS5QRB"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_absent",
+                "name": "alpha"
+              },
+              "passed": true,
+              "detail": "object `alpha` absent = true"
+            },
+            {
+              "check": {
+                "kind": "object_count",
+                "count": 0,
+                "type": null
+              },
+              "passed": true,
+              "detail": "0 object(s) (want 0)"
+            },
+            {
+              "check": {
+                "kind": "history",
+                "records": 2,
+                "cursor": 0,
+                "can_undo": false,
+                "can_redo": true
+              },
+              "passed": true,
+              "detail": "records=2 cursor=0 undo=false redo=true"
+            },
+            {
+              "check": {
+                "kind": "valid",
+                "max_warnings": null
+              },
+              "passed": true,
+              "detail": "0 error(s), 0 warning(s)"
+            }
+          ]
+        },
+        {
+          "index": 8,
+          "name": "a new write truncates the redo tail",
+          "command": "object.create",
+          "input": {
+            "type": "core:note",
+            "name": "gamma"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M386CNGYQSETZCAVR51TVZCQ"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "history",
+                "records": 1,
+                "cursor": 1,
+                "can_undo": null,
+                "can_redo": false
+              },
+              "passed": true,
+              "detail": "records=1 cursor=1 undo=true redo=false"
+            },
+            {
+              "check": {
+                "kind": "query_absent",
+                "name": "alpha"
+              },
+              "passed": true,
+              "detail": "object `alpha` absent = true"
+            },
+            {
+              "check": {
+                "kind": "query_absent",
+                "name": "beta"
+              },
+              "passed": true,
+              "detail": "object `beta` absent = true"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "failure-purity",
+      "title": "Failed commands leave no graph or journal residue",
+      "file": "12-failure-purity.yaml",
+      "passed": true,
+      "duration_ms": 25343,
+      "steps": [
+        {
+          "index": 0,
+          "name": "one good object — the clean baseline",
+          "command": "object.create",
+          "input": {
+            "type": "core:note",
+            "name": "keeper"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M386DGF578S4PD29A7W5VRYJ"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "snapshot",
+                "save": "clean",
+                "eq": null
+              },
+              "passed": true,
+              "detail": "state digest sha256:ec7382d4723e4e9229fbb12efe8d45c143a48ac8aa7e161e7f4dee135899ff6a"
+            },
+            {
+              "check": {
+                "kind": "history",
+                "records": 1,
+                "cursor": null,
+                "can_undo": null,
+                "can_redo": null
+              },
+              "passed": true,
+              "detail": "records=1 cursor=1 undo=true redo=false"
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "name": "schema rejection never reaches a transaction",
+          "command": "object.create",
+          "input": {
+            "name": "no-type"
+          },
+          "status": "ok",
+          "output": {
+            "error": "invalid input for object.create: $: missing required property `type`"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "error",
+                "contains": null
+              },
+              "passed": true,
+              "detail": "failed as expected: invalid input for object.create: $: missing required property `type`"
+            },
+            {
+              "check": {
+                "kind": "snapshot",
+                "save": null,
+                "eq": "clean"
+              },
+              "passed": true,
+              "detail": "state digest matches `clean` (sha256:ec7382d4723e4e9229fbb12efe8d45c143a48ac8aa7e161e7f4dee135899ff6a)"
+            },
+            {
+              "check": {
+                "kind": "history",
+                "records": 1,
+                "cursor": null,
+                "can_undo": null,
+                "can_redo": null
+              },
+              "passed": true,
+              "detail": "records=1 cursor=1 undo=true redo=false"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "name": "unknown command fails before any op",
+          "command": "totally.bogus",
+          "input": {},
+          "status": "ok",
+          "output": {
+            "error": "unknown command: totally.bogus"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "error",
+                "contains": null
+              },
+              "passed": true,
+              "detail": "failed as expected: unknown command: totally.bogus"
+            },
+            {
+              "check": {
+                "kind": "snapshot",
+                "save": null,
+                "eq": "clean"
+              },
+              "passed": true,
+              "detail": "state digest matches `clean` (sha256:ec7382d4723e4e9229fbb12efe8d45c143a48ac8aa7e161e7f4dee135899ff6a)"
+            },
+            {
+              "check": {
+                "kind": "history",
+                "records": 1,
+                "cursor": null,
+                "can_undo": null,
+                "can_redo": null
+              },
+              "passed": true,
+              "detail": "records=1 cursor=1 undo=true redo=false"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "name": "mid-handler failure reverts its own partial ops",
+          "command": "geometry.create_primitive",
+          "input": {
+            "kind": "cube",
+            "name": "ghost-cube",
+            "parent": "nonexistent-parent"
+          },
+          "status": "ok",
+          "output": {
+            "error": "object not found: nonexistent-parent"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "error",
+                "contains": null
+              },
+              "passed": true,
+              "detail": "failed as expected: object not found: nonexistent-parent"
+            },
+            {
+              "check": {
+                "kind": "query_absent",
+                "name": "ghost-cube"
+              },
+              "passed": true,
+              "detail": "object `ghost-cube` absent = true"
+            },
+            {
+              "check": {
+                "kind": "snapshot",
+                "save": null,
+                "eq": "clean"
+              },
+              "passed": true,
+              "detail": "state digest matches `clean` (sha256:ec7382d4723e4e9229fbb12efe8d45c143a48ac8aa7e161e7f4dee135899ff6a)"
+            },
+            {
+              "check": {
+                "kind": "history",
+                "records": 1,
+                "cursor": null,
+                "can_undo": null,
+                "can_redo": null
+              },
+              "passed": true,
+              "detail": "records=1 cursor=1 undo=true redo=false"
+            },
+            {
+              "check": {
+                "kind": "no_dangling_relations"
+              },
+              "passed": true,
+              "detail": "0 dangling relation(s)"
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "name": "relation to a missing endpoint fails closed",
+          "command": "relation.add",
+          "input": {
+            "type": "core:depends-on",
+            "from": "keeper",
+            "to": "not-there"
+          },
+          "status": "ok",
+          "output": {
+            "error": "object not found: not-there"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "error",
+                "contains": null
+              },
+              "passed": true,
+              "detail": "failed as expected: object not found: not-there"
+            },
+            {
+              "check": {
+                "kind": "relation_count",
+                "count": 0,
+                "type": "core:depends-on",
+                "from": null,
+                "to": null
+              },
+              "passed": true,
+              "detail": "0 relation(s) match type=Some(\"core:depends-on\") from=None to=None (want 0)"
+            },
+            {
+              "check": {
+                "kind": "snapshot",
+                "save": null,
+                "eq": "clean"
+              },
+              "passed": true,
+              "detail": "state digest matches `clean` (sha256:ec7382d4723e4e9229fbb12efe8d45c143a48ac8aa7e161e7f4dee135899ff6a)"
+            },
+            {
+              "check": {
+                "kind": "no_dangling_relations"
+              },
+              "passed": true,
+              "detail": "0 dangling relation(s)"
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "name": "deleting a missing object fails clean",
+          "command": "object.delete",
+          "input": {
+            "name": "not-there"
+          },
+          "status": "ok",
+          "output": {
+            "error": "object not found: not-there"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "error",
+                "contains": null
+              },
+              "passed": true,
+              "detail": "failed as expected: object not found: not-there"
+            },
+            {
+              "check": {
+                "kind": "object_count",
+                "count": 1,
+                "type": null
+              },
+              "passed": true,
+              "detail": "1 object(s) (want 1)"
+            },
+            {
+              "check": {
+                "kind": "snapshot",
+                "save": null,
+                "eq": "clean"
+              },
+              "passed": true,
+              "detail": "state digest matches `clean` (sha256:ec7382d4723e4e9229fbb12efe8d45c143a48ac8aa7e161e7f4dee135899ff6a)"
+            },
+            {
+              "check": {
+                "kind": "history",
+                "records": 1,
+                "cursor": null,
+                "can_undo": null,
+                "can_redo": null
+              },
+              "passed": true,
+              "detail": "records=1 cursor=1 undo=true redo=false"
+            },
+            {
+              "check": {
+                "kind": "valid",
+                "max_warnings": null
+              },
+              "passed": true,
+              "detail": "0 error(s), 0 warning(s)"
+            }
+          ]
+        },
+        {
+          "index": 6,
+          "name": "capability dispatch errors are clean too",
+          "command": "capability.run",
+          "input": {
+            "id": "no.such.capability",
+            "input": {}
+          },
+          "status": "ok",
+          "output": {
+            "error": "unknown capability: no.such.capability"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "error",
+                "contains": null
+              },
+              "passed": true,
+              "detail": "failed as expected: unknown capability: no.such.capability"
+            },
+            {
+              "check": {
+                "kind": "snapshot",
+                "save": null,
+                "eq": "clean"
+              },
+              "passed": true,
+              "detail": "state digest matches `clean` (sha256:ec7382d4723e4e9229fbb12efe8d45c143a48ac8aa7e161e7f4dee135899ff6a)"
+            },
+            {
+              "check": {
+                "kind": "history",
+                "records": 1,
+                "cursor": null,
+                "can_undo": null,
+                "can_redo": null
+              },
+              "passed": true,
+              "detail": "records=1 cursor=1 undo=true redo=false"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cad-artifact-undo",
+      "title": "Artifact digests verify on-disk; undo drops refs but keeps blobs",
+      "file": "13-cad-artifact-undo.yaml",
+      "passed": true,
+      "duration_ms": 44154,
+      "steps": [
+        {
+          "index": 0,
+          "name": "20mm cube",
+          "command": "cad.create_box",
+          "input": {
+            "size_mm": 20,
+            "name": "cube"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M386EBKWP59S0DVRF8Z4NTBS",
+            "name": "cube",
+            "type": "cad:body",
+            "brep": "sha256:c442b046611ca9330e9f327a9b83caf784c61b9a11bee98909caf35a060aa042",
+            "measures": {
+              "volume_mm3": 7999.999999999998,
+              "area_mm2": 2399.9999999999995,
+              "bbox": {
+                "min_mm": [
+                  -1e-7,
+                  -1e-7,
+                  -1e-7
+                ],
+                "max_mm": [
+                  20.0000001,
+                  20.0000001,
+                  20.0000001
+                ]
+              },
+              "center_mm": [
+                10.0,
+                10.0,
+                10.0
+              ]
+            },
+            "topology": {
+              "solids": 1,
+              "faces": 6,
+              "edges": 12,
+              "is_solid": true,
+              "is_valid": true,
+              "edge_ids": [
+                1685867657968,
+                1685867658352,
+                1685867657584,
+                1685867656176,
+                1685867655920,
+                1685867658480,
+                1685867654384,
+                1685867651184,
+                1685867654128,
+                1685867658736,
+                1685867655408,
+                1685867654640
+              ],
+              "face_ids": [
+                1685867306624,
+                1685867306304,
+                1685867306144,
+                1685867304544,
+                1685867308224,
+                1685867306464
+              ]
+            }
+          },
+          "duration_ms": 392,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "present",
+                "path": "output.brep"
+              },
+              "passed": true,
+              "detail": "output.brep present = true"
+            },
+            {
+              "check": {
+                "kind": "artifact_verified",
+                "path": "output.brep",
+                "ref": null
+              },
+              "passed": true,
+              "detail": "artifact sha256:c442b046611ca9330e9f327a9b83caf784c61b9a11bee98909caf35a060aa042 present + re-hash verified"
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "name": "export STEP → artifact sidecar",
+          "command": "cad.export_step",
+          "input": {
+            "object": "cube"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M386EBKWP59S0DVRF8Z4NTBS",
+            "step": "sha256:2b19544bd1b2b40e972873d7bd3f3bea1aaf843ee7523dfa21ac3188cbf7a03c",
+            "size_bytes": 15361
+          },
+          "duration_ms": 329,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "artifact_verified",
+                "path": "output.step",
+                "ref": null
+              },
+              "passed": true,
+              "detail": "artifact sha256:2b19544bd1b2b40e972873d7bd3f3bea1aaf843ee7523dfa21ac3188cbf7a03c present + re-hash verified"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "name": "undo drops the step ref — the blob survives as gc-able garbage",
+          "command": "engine.undo",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "undone": "01M386EBM5ABWABPV3SQGK22YN"
+          },
+          "duration_ms": 1,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "field_absent",
+                "name": "cube",
+                "path": "cad:shape.step"
+              },
+              "passed": true,
+              "detail": "`cube` cad:shape.step = None (want absent)"
+            },
+            {
+              "check": {
+                "kind": "artifact_verified",
+                "path": null,
+                "ref": "${cube_step.step}"
+              },
+              "passed": true,
+              "detail": "artifact sha256:2b19544bd1b2b40e972873d7bd3f3bea1aaf843ee7523dfa21ac3188cbf7a03c present + re-hash verified"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "name": "redo restores the ref",
+          "command": "engine.redo",
+          "input": null,
+          "status": "ok",
+          "output": {
+            "redone": "01M386EBM5ABWABPV3SQGK22YN"
+          },
+          "duration_ms": 0,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "cube",
+                "path": "cad:shape.step",
+                "value": "${cube_step.step}"
+              },
+              "passed": true,
+              "detail": "`cube` cad:shape.step = Some(String(\"sha256:2b19544bd1b2b40e972873d7bd3f3bea1aaf843ee7523dfa21ac3188cbf7a03c\")) (want String(\"sha256:2b19544bd1b2b40e972873d7bd3f3bea1aaf843ee7523dfa21ac3188cbf7a03c\"))"
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "name": "save_as migrates artifacts to the new sidecar",
+          "command": "engine.save_as",
+          "input": {
+            "file": "moved.worldos"
+          },
+          "status": "ok",
+          "output": {
+            "saved_as": "D:\\ytb_tool_temp\\.tmpenXKEN\\moved.worldos"
+          },
+          "duration_ms": 15988,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "artifact_verified",
+                "path": null,
+                "ref": "${cube_step.step}"
+              },
+              "passed": true,
+              "detail": "artifact sha256:2b19544bd1b2b40e972873d7bd3f3bea1aaf843ee7523dfa21ac3188cbf7a03c present + re-hash verified"
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "name": "reopen the moved file — refs still resolve + verify",
+          "command": "engine.reopen",
+          "input": {
+            "file": "moved.worldos"
+          },
+          "status": "ok",
+          "output": {
+            "reopened": "D:\\ytb_tool_temp\\.tmpenXKEN\\moved.worldos"
+          },
+          "duration_ms": 6,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "cube",
+                "path": null,
+                "value": null
+              },
+              "passed": true,
+              "detail": "object `cube` exists"
+            },
+            {
+              "check": {
+                "kind": "query_object",
+                "name": "cube",
+                "path": "cad:shape.step",
+                "value": "${cube_step.step}"
+              },
+              "passed": true,
+              "detail": "`cube` cad:shape.step = Some(String(\"sha256:2b19544bd1b2b40e972873d7bd3f3bea1aaf843ee7523dfa21ac3188cbf7a03c\")) (want String(\"sha256:2b19544bd1b2b40e972873d7bd3f3bea1aaf843ee7523dfa21ac3188cbf7a03c\"))"
+            },
+            {
+              "check": {
+                "kind": "artifact_verified",
+                "path": null,
+                "ref": "${cube_step.step}"
+              },
+              "passed": true,
+              "detail": "artifact sha256:2b19544bd1b2b40e972873d7bd3f3bea1aaf843ee7523dfa21ac3188cbf7a03c present + re-hash verified"
+            },
+            {
+              "check": {
+                "kind": "valid",
+                "max_warnings": null
+              },
+              "passed": true,
+              "detail": "0 error(s), 0 warning(s)"
+            }
+          ]
+        },
+        {
+          "index": 6,
+          "name": "imported STEP body re-verifies its own source artifact",
+          "command": "cad.import_step",
+          "input": {
+            "step": "sha256:2b19544bd1b2b40e972873d7bd3f3bea1aaf843ee7523dfa21ac3188cbf7a03c",
+            "name": "cube-re"
+          },
+          "status": "ok",
+          "output": {
+            "id": "01M386EVJPZ40PDDD1GSXN33FX",
+            "name": "cube-re",
+            "type": "cad:body",
+            "brep": "sha256:328283ff0359cbfa4fdfb6f2c5a75846534e1884159d78f294b7706ce640ec7d",
+            "measures": {
+              "volume_mm3": 7999.999999999998,
+              "area_mm2": 2399.9999999999995,
+              "bbox": {
+                "min_mm": [
+                  -1e-7,
+                  -1e-7,
+                  -1e-7
+                ],
+                "max_mm": [
+                  20.0000001,
+                  20.0000001,
+                  20.0000001
+                ]
+              },
+              "center_mm": [
+                10.0,
+                10.0,
+                10.0
+              ]
+            },
+            "topology": {
+              "solids": 1,
+              "faces": 6,
+              "edges": 12,
+              "is_solid": true,
+              "is_valid": true,
+              "edge_ids": [
+                1685867658352,
+                1685867654000,
+                1685867652080,
+                1685867652592,
+                1685867655792,
+                1685867658992,
+                1685867658480,
+                1685867658608,
+                1685867654768,
+                1685867658736,
+                1685867655280,
+                1685867651952
+              ],
+              "face_ids": [
+                1685867303424,
+                1685867303744,
+                1685867304224,
+                1685867303904,
+                1685867307264,
+                1685867302464
+              ]
+            }
+          },
+          "duration_ms": 26,
+          "checks": [
+            {
+              "check": {
+                "kind": "ok"
+              },
+              "passed": true,
+              "detail": "ok"
+            },
+            {
+              "check": {
+                "kind": "approx",
+                "path": "output.measures.volume_mm3",
+                "value": 8000.0,
+                "rel": 0.0001
+              },
+              "passed": true,
+              "detail": "output.measures.volume_mm3 = 7999.999999999998 (want ~8000 rel 0.0001)"
+            },
+            {
+              "check": {
+                "kind": "artifact_verified",
+                "path": "output.brep",
+                "ref": null
+              },
+              "passed": true,
+              "detail": "artifact sha256:328283ff0359cbfa4fdfb6f2c5a75846534e1884159d78f294b7706ce640ec7d present + re-hash verified"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total": 13,
+    "passed": 13,
+    "failed": 0,
+    "duration_ms": 421933
+  }
+}

@@ -27,10 +27,11 @@ Brutally honest current-state constraints. Updated when reality changes.
   (e.g. fsync failure mid-commit) are untested; the store relies on
   SQLite's own atomicity there.
 - **Save latency is real on Windows.** `synchronous=FULL` + WAL means
-  `Engine::create`/`save` pay multiple fsyncs (measured ~16s create,
-  ~4s save on a Windows dev box under Defender-class AV scanning).
-  Property-test case counts are deliberately bounded for this; a
-  batched or relaxed-durability mode is unexplored.
+  `Engine::create`/`save` pay multiple fsyncs — measured 6.7–91.8s for
+  `save` across 100→100k objects (0.13→93 MB files) on a dev box under
+  Defender-class AV scanning, and `Engine::create` alone 14–90s with
+  extreme AV-driven variance. Property-test case counts are deliberately
+  bounded for this; a batched or relaxed-durability mode is unexplored.
 - **Migration coverage is thin.** Only schema v1 exists; no
   historical-version fixture matrix.
 - **CAD artifacts require a sidecar.** BRep/STEP/STL outputs are stored in
@@ -114,8 +115,19 @@ Brutally honest current-state constraints. Updated when reality changes.
 
 ## Scale & platform
 
-- **Performance unmeasured.** No benchmarks; no validated object-count
-  ceiling; `find_by_name`/relation scans are O(n).
+- **Performance is now baselined, not bounded.** `worldos-bench perf`
+  measures create/save/reopen/find/search/undo at 100/10k/100k objects
+  (`bench/reports/worldbench-perf-*.json`). Measured on the Windows dev
+  host (dev profile, single run): in-memory `object.create` ~80–90µs
+  each; `find_by_name` is confirmed O(n) (8µs → 635µs → 7.0ms per
+  lookup as n grows 100 → 10k → 100k); `search` 0→261ms; `reopen`
+  0.3s → 1.1s → 9.9s; `save` is the wall — 6.7s → 24.2s → 91.8s,
+  dominated by fsync + AV scan of a 93 MB file at 100k. These are
+  single-run regression baselines, not statistical claims: no
+  repetitions, no percentiles, no warm/cold cache control, and AV
+  scheduling makes run-to-run variance large (project_create alone
+  measured 14–90s on identical empty projects across runs). No
+  validated object-count ceiling beyond the 100k point.
 - **Windows-only CI** (by design for now — `windows-latest`). Linux/
   macOS toolchains are untested; desktop is MinGW-checked only
   (cdylib workaround in `1087e28`).

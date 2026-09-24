@@ -1,0 +1,70 @@
+id: mesh-roundtrip
+title: Primitive → mesh export → digest check → import → measured geom:mesh
+steps:
+  - name: 10mm cube primitive
+    command: geometry.create_primitive
+    input: {kind: cube, name: proto-cube, size: 10}
+    expect:
+      - {kind: ok}
+      - {kind: query_object, name: proto-cube}
+
+  - name: export binary STL into the task tempdir
+    command: geometry.export
+    input: {name: proto-cube, path: "${bench.dir}/proto-cube.stl", format: stl}
+    save: cube_stl
+    expect:
+      - {kind: ok}
+      - {kind: eq, path: "output.triangles", value: 12}
+      - {kind: present, path: "output.sha256"}
+      - {kind: file_digest, path: "${bench.dir}/proto-cube.stl", sha256_path: "output.sha256"}
+
+  - name: export OBJ too
+    command: geometry.export
+    input: {name: proto-cube, path: "${bench.dir}/proto-cube.obj", format: obj}
+    expect:
+      - {kind: ok}
+      - {kind: file_digest, path: "${bench.dir}/proto-cube.obj", sha256_path: "output.sha256"}
+
+  - name: exports never overwrite
+    command: geometry.export
+    input: {name: proto-cube, path: "${bench.dir}/proto-cube.stl", format: stl}
+    expect:
+      - {kind: error, contains: "never overwritten"}
+
+  - name: traversal guard rejects `..`
+    command: geometry.export
+    input: {name: proto-cube, path: "../escape.stl"}
+    expect:
+      - {kind: error, contains: "traversal"}
+
+  - name: import the STL back as geom:mesh
+    command: geometry.import
+    input: {path: "${bench.dir}/proto-cube.stl", name: cube-mesh}
+    expect:
+      - {kind: ok}
+      - {kind: eq, path: "output.triangles", value: 12}
+      - {kind: eq, path: "output.type", value: "geom:mesh"}
+      # the stored component digests the source bytes it came from
+      - {kind: query_object, name: cube-mesh, path: "geom:mesh.source.sha256", value: "${cube_stl.sha256}"}
+
+  - name: mesh measures like the primitive it came from
+    command: capability.run
+    input: {id: geometry.measure, input: {name: cube-mesh}}
+    expect:
+      - {kind: ok}
+      - {kind: eq, path: "output.kind", value: "mesh"}
+      - {kind: approx, path: "output.volume", value: 1000}
+      - {kind: approx, path: "output.surface_area", value: 600}
+
+  - name: a B-rep body refuses the mesh-export path
+    command: cad.create_box
+    input: {size_mm: 5, name: solid}
+    expect:
+      - {kind: ok}
+
+  - name: geometry.export on a cad:body fails cleanly
+    command: geometry.export
+    input: {object: solid, path: "${bench.dir}/solid.stl"}
+    expect:
+      - {kind: error, contains: "B-rep"}
+      - {kind: valid}

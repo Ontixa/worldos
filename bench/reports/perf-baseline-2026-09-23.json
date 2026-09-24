@@ -1,0 +1,65 @@
+{
+  "format_version": 1,
+  "generated_at": "2026-09-23T23:07:08.2534911Z",
+  "profile": "dev (deps at opt-level=2)",
+  "environment": {
+    "os": "windows",
+    "arch": "x86_64",
+    "caveat": "single-run wall times on a Windows dev host (NTFS, antivirus scanning); `synchronous=FULL` makes create/save fsync-bound — treat as regression baselines, not SLAs"
+  },
+  "runs": [
+    {
+      "objects": 100,
+      "project_create_ms": 48297,
+      "create_ms": 9,
+      "create_us_per_object": 90,
+      "save_ms": 6724,
+      "reopen_ms": 332,
+      "find_by_name_us": 8,
+      "search_ms": 0,
+      "undo_ms": 0,
+      "redo_ms": 0,
+      "file_bytes": 135168,
+      "history_records": 100,
+      "query_lookups": 100
+    },
+    {
+      "objects": 10000,
+      "project_create_ms": 89863,
+      "create_ms": 824,
+      "create_us_per_object": 82,
+      "save_ms": 24151,
+      "reopen_ms": 1102,
+      "find_by_name_us": 635,
+      "search_ms": 26,
+      "undo_ms": 0,
+      "redo_ms": 0,
+      "file_bytes": 9322496,
+      "history_records": 10000,
+      "query_lookups": 200
+    },
+    {
+      "objects": 100000,
+      "project_create_ms": 49896,
+      "create_ms": 8020,
+      "create_us_per_object": 80,
+      "save_ms": 91787,
+      "reopen_ms": 9947,
+      "find_by_name_us": 6971,
+      "search_ms": 261,
+      "undo_ms": 0,
+      "redo_ms": 0,
+      "file_bytes": 93024256,
+      "history_records": 100000,
+      "query_lookups": 200
+    }
+  ],
+  "summary": {
+    "sizes": [
+      100,
+      10000,
+      100000
+    ],
+    "duration_ms": 330952
+  }
+}

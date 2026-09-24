@@ -1,8 +1,8 @@
 # Engineering Status
 
 Only demonstrably working behavior is listed here. Verified on
-2026-09-19 (Windows 10, `x86_64-pc-windows-gnu`, cargo test
---workspace green; WorldBench corpus 6/6 pass).
+2026-09-23 (Windows 10, `x86_64-pc-windows-gnu`, cargo test
+--workspace green; WorldBench corpus 13/13 pass).
 
 ## Working today
 
@@ -85,8 +85,25 @@ Only demonstrably working behavior is listed here. Verified on
   Structured failures: `SelectorEmpty` / `SelectorAmbiguous` /
   `SelectorKind` / `SelectorStale` / `BadSelector`. Contract:
   `docs/cad-selectors.md`.
-- **WorldBench v0** — `worldos-bench` crate + `bench/tasks/*.yaml`
-  corpus (6 tasks) + `bench/reports/v0-baseline.json` (6/6 pass).
+- **WorldBench** — `worldos-bench` crate + `bench/tasks/*.yaml` corpus
+  (13 tasks, 13/13 pass) + `bench/reports/`. Check kinds beyond receipt
+  assertions: `history` journal invariants (records/cursor/undo-redo
+  availability across save→reopen), `snapshot` SHA-256 project digests
+  (exact undo/redo, failure purity, reopen equality), `object_count` /
+  `relation_count` (name-or-id endpoints, type filter),
+  `no_dangling_relations`, `field_absent`, `valid` (engine validators),
+  `artifact_verified` (sidecar blob re-hash), `file_digest` (exported
+  file vs receipt claim). Steps also cover `engine.{save,save_as,reopen,
+  undo,redo}` and `capability.run` (`agent.run`, `project.inspect`,
+  `geometry.measure`); `${var.path}` and `${bench.dir}` interpolation.
+- **Performance baselines** — `worldos-bench perf` measures
+  project/object create, save, reopen, `find_by_name`, search and
+  undo/redo at 100 / 10k / 100k objects; `scripts/bench.ps1 -Suite perf`
+  writes `bench/reports/worldbench-perf-*.json`. Single-run dev-profile
+  numbers on the Windows dev host (2026-09-23, 100/10k/100k objects):
+  save 6.7s/24.2s/91.8s (0.13/9.3/93 MB files, fsync-bound under AV),
+  reopen 0.3s/1.1s/9.9s, `find_by_name` 8µs/635µs/7.0ms per lookup
+  (O(n) as designed), create ~80–90µs/object.
 - **Adversarial property tests** (`proptest`) — random command
   sequences prove undo-all restores initial state and redo-all
   restores final; failed commands inside explicit transactions leave

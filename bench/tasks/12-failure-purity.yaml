@@ -1,0 +1,63 @@
+id: failure-purity
+title: Failed commands leave no graph or journal residue
+steps:
+  - name: one good object — the clean baseline
+    command: object.create
+    input: {type: core:note, name: keeper}
+    expect:
+      - {kind: ok}
+      - {kind: snapshot, save: clean}
+      - {kind: history, records: 1}
+
+  - name: schema rejection never reaches a transaction
+    command: object.create
+    input: {name: no-type}
+    expect:
+      - {kind: error}
+      - {kind: snapshot, eq: clean}
+      - {kind: history, records: 1}
+
+  - name: unknown command fails before any op
+    command: totally.bogus
+    input: {}
+    expect:
+      - {kind: error}
+      - {kind: snapshot, eq: clean}
+      - {kind: history, records: 1}
+
+  - name: mid-handler failure reverts its own partial ops
+    command: geometry.create_primitive
+    input: {kind: cube, name: ghost-cube, parent: nonexistent-parent}
+    expect:
+      - {kind: error}
+      - {kind: query_absent, name: ghost-cube}
+      - {kind: snapshot, eq: clean}
+      - {kind: history, records: 1}
+      - {kind: no_dangling_relations}
+
+  - name: relation to a missing endpoint fails closed
+    command: relation.add
+    input: {type: core:depends-on, from: keeper, to: not-there}
+    expect:
+      - {kind: error}
+      - {kind: relation_count, type: core:depends-on, count: 0}
+      - {kind: snapshot, eq: clean}
+      - {kind: no_dangling_relations}
+
+  - name: deleting a missing object fails clean
+    command: object.delete
+    input: {name: not-there}
+    expect:
+      - {kind: error}
+      - {kind: object_count, count: 1}
+      - {kind: snapshot, eq: clean}
+      - {kind: history, records: 1}
+      - {kind: valid}
+
+  - name: capability dispatch errors are clean too
+    command: capability.run
+    input: {id: no.such.capability, input: {}}
+    expect:
+      - {kind: error}
+      - {kind: snapshot, eq: clean}
+      - {kind: history, records: 1}

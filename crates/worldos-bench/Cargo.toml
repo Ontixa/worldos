@@ -1,6 +1,6 @@
 [package]
 name = "worldos-bench"
-description = "WorldBench v0 — deterministic task runner producing evidence-rich JSON records"
+description = "WorldBench — deterministic task runner producing evidence-rich JSON records, plus performance baselines"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,6 +11,9 @@ authors.workspace = true
 worldos-engine = { path = "../worldos-engine" }
 worldos-cad = { path = "../worldos-cad" }
 worldos-adapter-cadrum = { path = "../worldos-adapter-cadrum" }
+worldos-agent = { path = "../worldos-agent" }
+worldos-artifact = { path = "../worldos-artifact" }
+worldos-kernel = { path = "../worldos-kernel" }
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml = "0.9.34"

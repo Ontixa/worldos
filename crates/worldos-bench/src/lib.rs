@@ -1,10 +1,27 @@
-//! WorldBench v0 — deterministic task runner for WorldOS.
+//! WorldBench — deterministic task runner for WorldOS.
 //!
 //! A *task* is a YAML file describing a linear sequence of steps. Each
-//! step is either a real engine command (`cad.create_box`, …) or an
-//! engine lifecycle op (`engine.save`, `engine.reopen`, `engine.undo`,
-//! `engine.redo`, `engine.save_as`). Steps carry `expect` checks that
-//! are evaluated against the command receipt (or error).
+//! step is a real engine command (`cad.create_box`, …), an engine
+//! lifecycle op (`engine.save`, `engine.reopen`, `engine.undo`,
+//! `engine.redo`, `engine.save_as`), or a capability dispatch
+//! (`capability.run` with `{id, input}` — covers `agent.run`,
+//! `project.inspect`, `geometry.measure`, …).
+//!
+//! Steps carry `expect` checks evaluated against the command receipt
+//! (or error) and live engine state. Beyond receipt assertions (`ok`,
+//! `error`, `eq`, `approx`, `present`) the runner supports state-level
+//! checks: `query_object` / `query_absent` / `field_absent`,
+//! `object_count` / `relation_count`, `no_dangling_relations`, `valid`
+//! (engine validators), `history` cursor invariants, `snapshot` state
+//! digests (exact undo/redo, failure-purity and save/reopen equality),
+//! `artifact_verified` (sidecar blob re-hash) and `file_digest`
+//! (exported-file SHA-256 against the receipt's claim). See
+//! [`checks::Check`] for the full vocabulary.
+//!
+//! `"${var.path}"` markers inside `input` (and inside check fields that
+//! carry values, names or refs) resolve to earlier `save:`-bound
+//! receipt outputs; `"${bench.dir}"` names the task's temp directory —
+//! the only place file-producing steps should write.
 //!
 //! The runner is deliberately not an agent: it is the non-LLM
 //! baseline. Same engine, same commands, same receipts — the record
@@ -22,12 +39,15 @@
 //!     expect:
 //!       - {kind: ok}
 //!       - {kind: present, path: "output.id"}
+//!       - {kind: object_count, count: 1}
 //!   - command: engine.undo
 //!     expect:
 //!       - {kind: ok}
 //!       - {kind: query_absent, name: memo}
+//!       - {kind: history, records: 1, cursor: 0, can_redo: true}
 //! ```
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
@@ -36,44 +56,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use worldos_engine::Engine;
 
-/// One expect-check inside a step.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum Check {
-    /// Step must succeed.
-    Ok,
-    /// Step must fail; `contains` optionally matches the error text.
-    Error {
-        #[serde(default)]
-        contains: Option<String>,
-    },
-    /// `path` (dot-separated into receipt output) must equal `value`.
-    Eq { path: String, value: Value },
-    /// Numeric `path` must be within `rel` relative error of `value`.
-    Approx {
-        path: String,
-        value: f64,
-        #[serde(default = "default_rel")]
-        rel: f64,
-    },
-    /// `path` must exist and be non-null in the output.
-    Present { path: String },
-    /// No object named `name` may exist in the project afterwards.
-    QueryAbsent { name: String },
-    /// An object named `name` must exist afterwards; `path` optionally
-    /// dot-resolves into its component data and must equal `value`.
-    QueryObject {
-        name: String,
-        #[serde(default)]
-        path: Option<String>,
-        #[serde(default)]
-        value: Option<Value>,
-    },
-}
+mod checks;
+mod perf;
 
-fn default_rel() -> f64 {
-    1e-4
-}
+pub use checks::{Check, project_digest};
+pub use perf::{PerfReport, PerfRun, run_perf};
 
 /// A single step in a task.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -167,107 +154,25 @@ pub fn load_tasks(dir: &Path) -> Result<Vec<(PathBuf, Task)>, String> {
     Ok(out)
 }
 
-fn dig<'a>(v: &'a Value, path: &str) -> Option<&'a Value> {
-    // `output.*` reads naturally in task files — strip the prefix
-    // since `v` already IS the receipt output.
+/// `output.foo.0.bar` → `foo.0.bar` — `output.*` reads naturally in
+/// task files even though `v` already IS the receipt output. Numeric
+/// segments index into arrays (`results.0.status`).
+pub(crate) fn dig<'a>(v: &'a Value, path: &str) -> Option<&'a Value> {
     let path = path.strip_prefix("output.").unwrap_or(path);
     let mut cur = v;
     for seg in path.split('.') {
-        cur = cur.get(seg)?;
+        cur = match cur {
+            Value::Array(a) => a.get(seg.parse::<usize>().ok()?)?,
+            _ => cur.get(seg)?,
+        };
     }
     Some(cur)
 }
 
-fn eval_check(check: &Check, engine: &Engine, ok: bool, out: &Value, err: &str) -> (bool, String) {
-    match check {
-        Check::Ok => (
-            ok,
-            if ok {
-                "ok".into()
-            } else {
-                format!("failed: {err}")
-            },
-        ),
-        Check::Error { contains } => {
-            if ok {
-                (false, "expected error, step succeeded".into())
-            } else if let Some(c) = contains {
-                (
-                    err.contains(c.as_str()),
-                    format!("error `{err}` contains `{c}`"),
-                )
-            } else {
-                (true, format!("failed as expected: {err}"))
-            }
-        }
-        Check::Eq { path, value } => {
-            if !ok {
-                return (false, format!("step failed: {err}"));
-            }
-            let got = dig(out, path);
-            (
-                got == Some(value),
-                format!("{path} = {:?} (want {:?})", got, value),
-            )
-        }
-        Check::Approx { path, value, rel } => {
-            if !ok {
-                return (false, format!("step failed: {err}"));
-            }
-            match dig(out, path).and_then(|v| v.as_f64()) {
-                Some(got) => {
-                    let ok = worldos_cad::approx_relative(got, *value)
-                        || (got - value).abs() <= rel * value.abs().max(1.0);
-                    (ok, format!("{path} = {got} (want ~{value} rel {rel})"))
-                }
-                None => (false, format!("{path} not a number")),
-            }
-        }
-        Check::Present { path } => {
-            if !ok {
-                return (false, format!("step failed: {err}"));
-            }
-            (
-                dig(out, path).is_some(),
-                format!("{path} present = {}", dig(out, path).is_some()),
-            )
-        }
-        Check::QueryAbsent { name } => {
-            let absent = engine.project().find_by_name(name).is_none();
-            (absent, format!("object `{name}` absent = {absent}"))
-        }
-        Check::QueryObject { name, path, value } => {
-            let Some(obj) = engine.project().find_by_name(name) else {
-                return (false, format!("object `{name}` not found"));
-            };
-            if let (Some(p), Some(want)) = (path, value) {
-                // path is "component.field.subfield": resolve into the
-                // object's component map
-                let mut parts = p.splitn(2, '.');
-                let comp = parts.next().unwrap_or("");
-                let rest = parts.next().unwrap_or("");
-                let found = obj.components.get(comp).and_then(|c| {
-                    if rest.is_empty() {
-                        Some(&c.data)
-                    } else {
-                        dig(&c.data, rest)
-                    }
-                });
-                let matched = found == Some(want);
-                (
-                    matched,
-                    format!("`{name}` {p} = {:?} (want {:?})", found, want),
-                )
-            } else {
-                (true, format!("object `{name}` exists"))
-            }
-        }
-    }
-}
-
 /// Run every task in `dir` under a fresh engine per task (tempdir
-/// project file, cadrum kernel attached). Deterministic: sorted task
-/// files, ordered steps, no clocks in the graph.
+/// project file, cadrum kernel attached, `agent.run` registered).
+/// Deterministic: sorted task files, ordered steps, no clocks in the
+/// graph.
 pub fn run(dir: &Path) -> Result<Report, String> {
     let tasks = load_tasks(dir)?;
     let kernel = worldos_adapter_cadrum::CadrumKernel::new();
@@ -279,7 +184,7 @@ pub fn run(dir: &Path) -> Result<Report, String> {
     }
     let passed = records.iter().filter(|r| r.passed).count();
     let report = Report {
-        format_version: 1,
+        format_version: 2,
         generated_at: time::OffsetDateTime::now_utc()
             .format(&time::format_description::well_known::Rfc3339)
             .unwrap_or_default(),
@@ -295,6 +200,16 @@ pub fn run(dir: &Path) -> Result<Report, String> {
     Ok(report)
 }
 
+/// Attach the CAD kernel + the bench-registered capabilities every
+/// interface shares (`agent.run` — same registration the CLI performs).
+fn attach_services(engine: &mut Engine) -> Result<(), String> {
+    engine
+        .attach_cad(Arc::new(worldos_adapter_cadrum::CadrumKernel::new()))
+        .map_err(|e| format!("attach_cad: {e}"))?;
+    engine.register_capability(Arc::new(worldos_agent::AgentRun));
+    Ok(())
+}
+
 fn run_task(file: &Path, task: &Task) -> Result<TaskRecord, String> {
     let tmp = tempfile::tempdir().map_err(|e| format!("tempdir: {e}"))?;
     let project_path = tmp.path().join(format!("{}.worldos", task.id));
@@ -302,13 +217,20 @@ fn run_task(file: &Path, task: &Task) -> Result<TaskRecord, String> {
 
     let mut engine =
         Engine::create(&task.id, &project_path).map_err(|e| format!("engine create: {e}"))?;
-    engine
-        .attach_cad(Arc::new(worldos_adapter_cadrum::CadrumKernel::new()))
-        .map_err(|e| format!("attach_cad: {e}"))?;
+    attach_services(&mut engine)?;
+
+    // `bench.dir` is the only sanctioned target for file-producing
+    // steps (`geometry.export`, …): the task's own tempdir.
+    let mut vars: HashMap<String, Value> = HashMap::new();
+    vars.insert(
+        "bench".into(),
+        json!({"dir": tmp.path().to_string_lossy(), "task": task.id}),
+    );
+    // Named `snapshot` digests — live across steps, die with the task.
+    let mut snapshots: HashMap<String, String> = HashMap::new();
 
     let mut steps = Vec::new();
     let mut task_ok = true;
-    let mut vars: std::collections::HashMap<String, Value> = std::collections::HashMap::new();
     for (i, step) in task.steps.iter().enumerate() {
         let t0 = Instant::now();
         let input = interpolate(&step.input, &vars);
@@ -316,7 +238,7 @@ fn run_task(file: &Path, task: &Task) -> Result<TaskRecord, String> {
         let mut checks = Vec::new();
         let mut step_ok = true;
         for c in &step.expect {
-            let (passed, detail) = eval_check(c, &engine, ok, &out, &err);
+            let (passed, detail) = eval_check(c, &engine, ok, &out, &err, &vars, &mut snapshots);
             step_ok &= passed;
             checks.push(CheckRecord {
                 check: c.clone(),
@@ -369,27 +291,26 @@ fn run_task(file: &Path, task: &Task) -> Result<TaskRecord, String> {
     })
 }
 
-/// Replace `"${var.path}"` strings in `input` with values captured by
-/// earlier `save:` steps.
-fn interpolate(input: &Value, vars: &std::collections::HashMap<String, Value>) -> Value {
+fn eval_check(
+    check: &Check,
+    engine: &Engine,
+    ok: bool,
+    out: &Value,
+    err: &str,
+    vars: &HashMap<String, Value>,
+    snapshots: &mut HashMap<String, String>,
+) -> (bool, String) {
+    checks::eval_check(check, engine, ok, out, err, vars, snapshots)
+}
+
+/// Replace `"${var.path}"` markers in `input` with values captured by
+/// earlier `save:` steps (or the seeded `bench` var). A string that is
+/// exactly one marker resolves to the stored value verbatim — including
+/// non-strings; a longer string with embedded markers is rendered
+/// inline (strings raw, everything else as compact JSON).
+pub(crate) fn interpolate(input: &Value, vars: &HashMap<String, Value>) -> Value {
     match input {
-        Value::String(s) => {
-            if let Some(rest) = s.strip_prefix("${").and_then(|r| r.strip_suffix('}')) {
-                let mut parts = rest.splitn(2, '.');
-                let var = parts.next().unwrap_or("");
-                let path = parts.next().unwrap_or("");
-                if let Some(v) = vars.get(var) {
-                    if path.is_empty() {
-                        return v.clone();
-                    }
-                    if let Some(found) = dig(v, path) {
-                        return found.clone();
-                    }
-                }
-                return Value::Null;
-            }
-            input.clone()
-        }
+        Value::String(s) => interpolate_str(s, vars),
         Value::Array(a) => Value::Array(a.iter().map(|v| interpolate(v, vars)).collect()),
         Value::Object(m) => Value::Object(
             m.iter()
@@ -400,8 +321,69 @@ fn interpolate(input: &Value, vars: &std::collections::HashMap<String, Value>) -
     }
 }
 
+/// String half of [`interpolate`]: whole-string marker → verbatim
+/// value; embedded markers → inline substitution.
+pub(crate) fn interpolate_str(s: &str, vars: &HashMap<String, Value>) -> Value {
+    if let Some(inner) = s
+        .strip_prefix("${")
+        .and_then(|r| r.strip_suffix('}'))
+        .filter(|inner| !inner.contains(['$', '{', '}']))
+    {
+        return resolve_var(inner, vars);
+    }
+    if !s.contains("${") {
+        return Value::String(s.to_string());
+    }
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(start) = rest.find("${") {
+        out.push_str(&rest[..start]);
+        let body = &rest[start + 2..];
+        match body.find('}') {
+            Some(end) => {
+                out.push_str(&render(&resolve_var(&body[..end], vars)));
+                rest = &body[end + 1..];
+            }
+            None => {
+                out.push_str(&rest[start..]);
+                rest = "";
+            }
+        }
+    }
+    out.push_str(rest);
+    Value::String(out)
+}
+
+/// `var.path` → the stored `save:` output, dug by `path`.
+fn resolve_var(expr: &str, vars: &HashMap<String, Value>) -> Value {
+    let mut parts = expr.splitn(2, '.');
+    let var = parts.next().unwrap_or("");
+    let path = parts.next().unwrap_or("");
+    match vars.get(var) {
+        Some(v) if path.is_empty() => v.clone(),
+        Some(v) => dig(v, path).cloned().unwrap_or(Value::Null),
+        None => Value::Null,
+    }
+}
+
+/// Render a resolved value for inline `${…}` substitution: strings raw,
+/// anything else as compact JSON.
+pub(crate) fn render(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        other => other.to_string(),
+    }
+}
+
+/// Interpolate a check field and render it as a plain string — used
+/// for names, refs and file paths in state-level checks.
+pub(crate) fn interp_s(s: &str, vars: &HashMap<String, Value>) -> String {
+    render(&interpolate_str(s, vars))
+}
+
 /// Execute one step. `engine.*` commands are lifecycle ops handled by
-/// the runner; everything else goes through `Engine::execute`.
+/// the runner, `capability.run` dispatches `{id, input}` through the
+/// capability registry; everything else goes through `Engine::execute`.
 fn exec_step(
     engine: &mut Engine,
     project_path: &Path,
@@ -436,10 +418,8 @@ fn exec_step(
                 .unwrap_or_else(|| project_path.to_path_buf());
             match Engine::open(&path) {
                 Ok(mut e) => {
-                    if let Err(err) =
-                        e.attach_cad(Arc::new(worldos_adapter_cadrum::CadrumKernel::new()))
-                    {
-                        return Ok((false, Value::Null, format!("attach_cad: {err}")));
+                    if let Err(err) = attach_services(&mut e) {
+                        return Ok((false, Value::Null, err));
                     }
                     *engine = e;
                     Ok((
@@ -461,6 +441,17 @@ fn exec_step(
             Ok(None) => Ok((false, Value::Null, "nothing to redo".into())),
             Err(e) => Ok((false, Value::Null, e.to_string())),
         },
+        "capability.run" => {
+            let id = input.get("id").and_then(|v| v.as_str()).unwrap_or_default();
+            if id.is_empty() {
+                return Ok((false, Value::Null, "capability.run needs `id`".into()));
+            }
+            let cap_input = input.get("input").cloned().unwrap_or(Value::Null);
+            match engine.run_capability(id, cap_input) {
+                Ok(v) => Ok((true, v, String::new())),
+                Err(e) => Ok((false, Value::Null, e.to_string())),
+            }
+        }
         _ => match engine.execute(command, input.clone()) {
             Ok(receipt) => Ok((true, receipt.output, String::new())),
             Err(e) => Ok((false, Value::Null, e.to_string())),

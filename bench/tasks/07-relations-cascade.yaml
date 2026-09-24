@@ -1,0 +1,98 @@
+id: relations-cascade
+title: Relation-graph invariants, containment cascade, undo restoration
+steps:
+  - name: assembly root
+    command: object.create
+    input: {type: core:folder, name: asm}
+    expect:
+      - {kind: ok}
+      - {kind: history, records: 1, cursor: 1}
+
+  - name: first part contained in asm
+    command: object.create
+    input: {type: geom:cube, name: p1, parent: asm}
+    expect:
+      - {kind: ok}
+      - {kind: relation_count, type: core:contains, from: asm, count: 1}
+
+  - name: two more parts
+    command: object.create
+    input: {type: geom:cube, name: p2, parent: asm}
+    expect:
+      - {kind: ok}
+      - {kind: relation_count, type: core:contains, from: asm, count: 2}
+
+  - command: object.create
+    input: {type: geom:cube, name: p3, parent: asm}
+    expect:
+      - {kind: ok}
+      - {kind: relation_count, type: core:contains, from: asm, count: 3}
+      - {kind: no_dangling_relations}
+
+  - name: dependency edge between parts
+    command: relation.add
+    input: {type: core:depends-on, from: p1, to: p2}
+    expect:
+      - {kind: ok}
+      - {kind: relation_count, type: core:depends-on, count: 1}
+
+  - name: decision references two parts
+    command: decision.record
+    input:
+      name: d1
+      choice: aluminum
+      rationale: weight budget
+      affects: [p1, p3]
+    expect:
+      - {kind: ok}
+      - {kind: relation_count, type: core:references, from: d1, count: 2}
+
+  - name: graph totals via the inspect capability
+    command: capability.run
+    input: {id: project.inspect, input: {}}
+    expect:
+      - {kind: ok}
+      - {kind: eq, path: "output.object_count", value: 5}
+      - {kind: eq, path: "output.relation_count", value: 6}
+      - {kind: valid}
+
+  - name: deleting a part cleans its edges
+    command: object.delete
+    input: {name: p2}
+    expect:
+      - {kind: ok}
+      - {kind: query_absent, name: p2}
+      - {kind: relation_count, type: core:depends-on, count: 0}
+      - {kind: relation_count, type: core:contains, from: asm, count: 2}
+      - {kind: no_dangling_relations}
+      - {kind: valid}
+
+  - name: cascade delete removes the subtree
+    command: object.delete
+    input: {name: asm, cascade: true}
+    expect:
+      - {kind: ok}
+      - {kind: query_absent, name: p1}
+      - {kind: query_absent, name: p3}
+      - {kind: object_count, count: 1}
+      - {kind: no_dangling_relations}
+      - {kind: valid}
+
+  - name: undo restores the subtree and its edges
+    command: engine.undo
+    expect:
+      - {kind: ok}
+      - {kind: object_count, count: 4}
+      - {kind: relation_count, type: core:contains, from: asm, count: 2}
+      - {kind: relation_count, type: core:references, from: d1, count: 2}
+      - {kind: no_dangling_relations}
+      - {kind: valid}
+
+  - name: undoing the part delete restores its dependency edge
+    command: engine.undo
+    expect:
+      - {kind: ok}
+      - {kind: object_count, count: 5}
+      - {kind: relation_count, type: core:depends-on, from: p1, to: p2, count: 1}
+      - {kind: no_dangling_relations}
+      - {kind: valid}
