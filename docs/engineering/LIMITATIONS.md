@@ -100,7 +100,9 @@ Brutally honest current-state constraints. Updated when reality changes.
   cases beyond `not exists_named`). An unevaluable expression (bad term,
   missing object in a measure term) reads as "unsatisfied" each round —
   the run fails at the iteration cap or a planner dead-end with the
-  last verdict in the report.
+  last verdict in the report. `not`/paren nesting is capped at 128
+  levels — deeper input evaluates `unknown` rather than risking the
+  parser's recursion.
 - **Reference checks are presence checks.** Every top-level output `id`
   must still exist after its iteration and at commit; `relation.add`
   outputs are checked as relations. Malformed or absent references fail
@@ -139,7 +141,8 @@ Brutally honest current-state constraints. Updated when reality changes.
 - Property tests now cover engine undo/redo round-trips, failed-
   transaction purity, save/reopen semantic equality, store snapshot
   round-trips, and process-abort crash recovery (`proptest`, bounded
-  deterministic cases). Still missing: fuzz targets (requirement
-  parser, StateOp streams, JSON-RPC, plugin protocol), malformed-input
-  campaigns beyond truncated/garbage project files, and a migration
-  matrix.
+  deterministic cases). libFuzzer targets cover the requirement
+  parser, `StateOp` streams, the JSON-RPC dispatch surface, the
+  plugin line protocol and store/migration input (`fuzz/`, bounded
+  smoke per PR + weekly campaign). Still missing: in-process
+  I/O-fault injection inside the store, and a migration matrix.
