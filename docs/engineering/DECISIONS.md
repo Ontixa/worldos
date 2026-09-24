@@ -27,6 +27,13 @@ tracks the smaller calls and cross-cutting policies.
 - **Parametric-first.** `cad:operation` components hold regeneration
   recipes; `cad:shape` holds derived state (artifact refs, measures,
   validity). Derived state is always rebuildable.
+- **Selectors over raw ids.** Recipes that need topology references
+  store `Selector` expressions (re-resolved per replay), never raw
+  kernel ids alone — raw `face_ids`/`edge_ids` are an escape hatch that
+  fails `SelectorStale` after any rebuild or reload (load-scoped under
+  cadrum). Resolution is kernel-agnostic
+  over `CadKernel::topology_view`; tolerances stay centralized in
+  `worldos_cad::tolerance`. Contract: `docs/cad-selectors.md`.
 - **Commit cadence.** One coherent change per commit; Conventional
   Commits; commit+push after every coherent update; Windows-native
   git/gh only (no WSL for repo ops).

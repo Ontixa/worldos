@@ -6,7 +6,9 @@
 //! graph never sees a kernel-native object.
 
 use crate::error::CadError;
-use crate::types::{BoolOp, Measures, MeshData, ShapeId, TessParams, Topology, TransformOp};
+use crate::types::{
+    BoolOp, Measures, MeshData, ShapeId, TessParams, Topology, TopologyView, TransformOp,
+};
 
 pub trait CadKernel: Send + Sync {
     /// Stable kernel identifier, e.g. `occt-8.0.1-cadrum` — recorded in
@@ -32,6 +34,12 @@ pub trait CadKernel: Send + Sync {
     // ---- inspection ----
     fn measure(&self, s: ShapeId) -> Result<Measures, CadError>;
     fn topology(&self, s: ShapeId) -> Result<Topology, CadError>;
+    /// Per-element topology detail powering semantic selectors
+    /// ([`crate::selector`]): each face reports its center, outward
+    /// normal (planes), surface axis, surface kind, and bounding edge
+    /// ids; each edge reports its endpoints. Load-scoped like
+    /// [`Topology::face_ids`] — invalidated by any rebuild or re-import.
+    fn topology_view(&self, s: ShapeId) -> Result<TopologyView, CadError>;
     fn mesh(&self, s: ShapeId, params: TessParams) -> Result<MeshData, CadError>;
 
     // ---- serialization (bytes; callers persist via artifact store) ----

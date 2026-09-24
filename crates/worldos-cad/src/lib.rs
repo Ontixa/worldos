@@ -11,14 +11,19 @@
 pub mod components;
 pub mod error;
 pub mod kernel;
+pub mod selector;
 pub mod tolerance;
 pub mod types;
 
 pub use components::{CAD_SCHEMA_VERSION, CadOperation, CadShape};
 pub use error::CadError;
 pub use kernel::CadKernel;
+pub use selector::{Selector, SelectorTarget, resolve, resolve_edges, resolve_faces};
 pub use tolerance::{
-    ANGULAR_TOLERANCE_RAD, AREA_TOLERANCE_MM2, LINEAR_TOLERANCE_MM, RELATIVE_MEASURE_TOLERANCE,
-    VOLUME_TOLERANCE_MM3, approx_mm, approx_relative,
+    ANGULAR_TOLERANCE_RAD, AREA_TOLERANCE_MM2, DIRECTION_DOT_TOLERANCE, LINEAR_TOLERANCE_MM,
+    RELATIVE_MEASURE_TOLERANCE, VOLUME_TOLERANCE_MM3, approx_mm, approx_relative,
 };
-pub use types::{BBox, BoolOp, Measures, MeshData, ShapeId, TessParams, Topology, TransformOp};
+pub use types::{
+    BBox, BoolOp, EdgeDetail, FaceDetail, FaceSurface, Measures, MeshData, ShapeId, TessParams,
+    Topology, TopologyView, TransformOp,
+};

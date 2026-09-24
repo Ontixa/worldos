@@ -57,6 +57,18 @@ Brutally honest current-state constraints. Updated when reality changes.
   use `cad.export_stl`. Exported files are external effects outside
   undo; the attributed command record (with content digest) is the
   audit trail.
+- **Selectors are geometric, not nominal.** `top_face`/`face_extreme`
+  resolve whatever matches *today's* topology — after a transform or a
+  boolean that changes which face is "top", a replayed recipe follows
+  the geometry, not the intent. Match cardinality can silently change
+  (a new coplanar face turns a 1-match `faces_normal_to` into 2, and
+  the feature applies to both). `face_ids`/`edge_ids` pin raw kernel
+  ids — load-scoped under cadrum (TShape addresses), dead even between
+  two commands — and fail `SelectorStale` after any rebuild or reload.
+  Curved faces have no
+  single normal — `faces_normal_to`/`top_face` never match them (use
+  `faces_axis_to`/`faces_of_kind`). Full contract:
+  [cad-selectors.md](../cad-selectors.md).
 - **Mesh import is triangles, not topology.** `geometry.import` reads
   binary STL and Wavefront OBJ into a `geom:mesh` component
   (`positions`/`indices`, vertex-welded for STL). There is no healing,

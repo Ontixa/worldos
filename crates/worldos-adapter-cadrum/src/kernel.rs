@@ -5,11 +5,12 @@ use std::io::Cursor;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use cadrum::{Boolean, DVec3, Solid, Tessellation};
+use cadrum::{Boolean, DVec3, Solid, SurfaceKind, Tessellation};
 use worldos_cad::error::CadError;
 use worldos_cad::kernel::CadKernel;
 use worldos_cad::types::{
-    BBox, BoolOp, Measures, MeshData, ShapeId, TessParams, Topology, TransformOp,
+    BBox, BoolOp, EdgeDetail, FaceDetail, FaceSurface, Measures, MeshData, ShapeId, TessParams,
+    Topology, TopologyView, TransformOp,
 };
 
 pub struct CadrumKernel {
@@ -212,6 +213,72 @@ impl CadKernel for CadrumKernel {
                 edge_ids,
                 face_ids,
             }
+        })
+    }
+
+    fn topology_view(&self, s: ShapeId) -> Result<TopologyView, CadError> {
+        self.with(s, |solid| {
+            let faces = solid
+                .iter_face()
+                .map(|f| {
+                    // Surface placement: `axis_z` is the surface's own Z
+                    // direction — a cylinder's axis, a plane's normal.
+                    // The face's orientation is NOT folded in (cadrum
+                    // contract), so it is only an unsigned direction.
+                    let (surface, axis) = match f.surface() {
+                        Some(surf) => {
+                            let surface = match surf.kind {
+                                SurfaceKind::Plane => FaceSurface::Plane,
+                                SurfaceKind::Cylinder { .. } => FaceSurface::Cylinder,
+                                SurfaceKind::Cone { .. } => FaceSurface::Cone,
+                                SurfaceKind::Sphere { .. } => FaceSurface::Sphere,
+                                SurfaceKind::Torus { .. } => FaceSurface::Torus,
+                            };
+                            let axis = match surface {
+                                // A sphere's placement axis carries no
+                                // usable meaning; non-elementary faces
+                                // report no surface at all.
+                                FaceSurface::Plane
+                                | FaceSurface::Cylinder
+                                | FaceSurface::Cone
+                                | FaceSurface::Torus => Some(surf.axis_z.normalize().to_array()),
+                                _ => None,
+                            };
+                            (surface, axis)
+                        }
+                        None => (FaceSurface::Other, None),
+                    };
+                    // Outward normal is only well-defined on a plane —
+                    // everywhere else it varies across the face. Project
+                    // the area-weighted center onto the trimmed face:
+                    // the hit may land on a boundary wire, but a plane's
+                    // normal field is constant so the direction is right.
+                    let normal = if surface == FaceSurface::Plane {
+                        let (_, n) = f.project(f.center());
+                        (n.length_squared() > 0.0).then(|| n.normalize().to_array())
+                    } else {
+                        None
+                    };
+                    FaceDetail {
+                        id: f.id(),
+                        center_mm: f.center().to_array(),
+                        normal,
+                        axis,
+                        surface,
+                        edge_ids: f.iter_edge().map(|e| e.id()).collect(),
+                        area_mm2: f.area(),
+                    }
+                })
+                .collect();
+            let edges = solid
+                .iter_edge()
+                .map(|e| EdgeDetail {
+                    id: e.id(),
+                    start_mm: e.start_point().to_array(),
+                    end_mm: e.end_point().to_array(),
+                })
+                .collect();
+            TopologyView { faces, edges }
         })
     }
 

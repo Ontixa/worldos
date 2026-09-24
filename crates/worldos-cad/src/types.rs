@@ -52,11 +52,78 @@ pub struct Topology {
     pub is_solid: bool,
     pub is_valid: bool,
     /// Kernel topology ids of the shape's edges — usable as selectors
-    /// for fillet/chamfer within the same session. NOT stable across
+    /// for fillet/chamfer on this loaded handle only. Load-scoped:
+    /// re-importing the same BRep yields different ids under cadrum
+    /// (TShape addresses), so they are NOT stable across commands or
     /// regeneration; re-resolve after every rebuild.
     pub edge_ids: Vec<u64>,
-    /// Kernel topology ids of the shape's faces.
+    /// Kernel topology ids of the shape's faces — same load-scoped
+    /// caveat as `edge_ids`.
     pub face_ids: Vec<u64>,
+}
+
+/// Elementary-surface classification of a face, kernel-agnostic.
+///
+/// Kernels report the underlying surface of each face; `Other` covers
+/// B-spline, Bézier, offset and any non-elementary surface (cadrum
+/// `Face::surface()` returning `None`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FaceSurface {
+    Plane,
+    Cylinder,
+    Cone,
+    Sphere,
+    Torus,
+    Other,
+}
+
+/// Per-face inspection data powering semantic selectors. All data is
+/// kernel-verified at call time and session-scoped: it describes the
+/// shape as loaded NOW and is invalidated by any rebuild.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FaceDetail {
+    /// Kernel topology id — matches [`Topology::face_ids`].
+    pub id: u64,
+    /// Area-weighted center (mm). Basis of directional selection;
+    /// may lie off the face for curved or concave faces.
+    pub center_mm: [f64; 3],
+    /// Outward normal (unit) — `Some` only where the face has a single
+    /// well-defined normal (planes). Signed: `+Z` and `-Z` differ.
+    pub normal: Option<[f64; 3]>,
+    /// Characteristic axis of the underlying surface (unit): plane
+    /// normal, cylinder/cone/torus axis. Sign is NOT meaningful —
+    /// `axis` matches directions up to sign. `None` for spheres and
+    /// non-elementary surfaces.
+    pub axis: Option<[f64; 3]>,
+    /// Elementary-surface classification.
+    pub surface: FaceSurface,
+    /// Kernel edge ids bounding this face (outer + inner wires) —
+    /// powers `edges_adjacent_to`.
+    pub edge_ids: Vec<u64>,
+    /// Trimmed face area, mm².
+    pub area_mm2: f64,
+}
+
+/// Per-edge inspection data powering semantic selectors.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EdgeDetail {
+    /// Kernel topology id — matches [`Topology::edge_ids`].
+    pub id: u64,
+    /// Start point (mm) — first curve parameter.
+    pub start_mm: [f64; 3],
+    /// End point (mm) — last curve parameter. Equals `start_mm` on
+    /// closed edges (full circles, seams).
+    pub end_mm: [f64; 3],
+}
+
+/// Per-element topology detail of a shape — the selector-resolution
+/// view. Returned by [`crate::CadKernel::topology_view`]; session-
+/// scoped plain data, never persisted in `cad:shape`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct TopologyView {
+    pub faces: Vec<FaceDetail>,
+    pub edges: Vec<EdgeDetail>,
 }
 
 /// A single rigid-body / affine transform step, applied in order.

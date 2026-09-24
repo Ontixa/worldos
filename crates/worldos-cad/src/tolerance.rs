@@ -19,6 +19,12 @@ pub const ANGULAR_TOLERANCE_RAD: f64 = 1e-12;
 /// (kernel noise is allowed to wiggle the last decimals).
 pub const RELATIVE_MEASURE_TOLERANCE: f64 = 1e-6;
 
+/// Direction tolerance for selector matching, expressed as the
+/// maximum allowed `1 - |a·b|` between unit vectors. `1e-6` ≈ 0.08° —
+/// loose enough to absorb kernel noise on recomputed normals, tight
+/// enough that intentionally drafted faces do not match.
+pub const DIRECTION_DOT_TOLERANCE: f64 = 1e-6;
+
 /// `a ≈ b` within [`LINEAR_TOLERANCE_MM`].
 pub fn approx_mm(a: f64, b: f64) -> bool {
     (a - b).abs() <= LINEAR_TOLERANCE_MM

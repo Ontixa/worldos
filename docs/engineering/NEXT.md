@@ -51,9 +51,14 @@ the next ~5 items, not the backlog.
 ## Then
 
 8. Plugin WASM sandbox (Wasmtime) + manifest-enforced denial tests.
-9. Semantic selectors for CAD topology (`top_face`,
-   `faces_normal_to(+Z)`, `edges_adjacent_to(f)`) with documented
-   stability guarantees.
+9. ~~Semantic selectors for CAD topology~~ — done: `worldos-cad`
+   `Selector` expression language (`top_face`, `faces_normal_to`,
+   `faces_axis_to`, `faces_of_kind`, `face_extreme`, `edges_adjacent_to`,
+   `edges_extreme`, set ops) resolved over `CadKernel::topology_view`;
+   `edge_select` on `cad.fillet`/`cad.chamfer`, `select` on
+   `cad.measure`, `cad.select` probe command; recipes persist the
+   expression and re-resolve on replay. Contract + honest limits in
+   `docs/cad-selectors.md`.
 10. Performance baselines (100 / 10k / 100k objects) + bench.ps1
     wiring.
 
