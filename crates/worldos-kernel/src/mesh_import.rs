@@ -107,20 +107,21 @@ pub fn from_binary_stl(bytes: &[u8]) -> Result<Mesh, KernelError> {
     }
     let count = u32::from_le_bytes(bytes[80..84].try_into().unwrap()) as usize;
     let needed = HEADER_LEN + 4 + count * FACET_LEN;
-    if bytes.len() == needed {
-        // Exact layout match — binary even when the header says "solid".
-        return facets(bytes, count);
-    }
-    if looks_like_ascii_stl(bytes) {
+    let exact = bytes.len() == needed;
+    if !exact && looks_like_ascii_stl(bytes) {
         return Err(bad("ASCII STL is not supported — use binary STL or OBJ"));
     }
+    // The cap binds every caller — including exact-length files, which
+    // must not bypass it just because their size is self-consistent.
     if count > MAX_IMPORT_TRIANGLES {
         return Err(bad(format!(
             "STL declares {count} facets — import is capped at {MAX_IMPORT_TRIANGLES}"
         )));
     }
-    if bytes.len() > needed {
-        return facets(bytes, count); // trailing bytes tolerated
+    if exact || bytes.len() > needed {
+        // Exact layout match — binary even when the header says
+        // "solid"; trailing bytes beyond `needed` are tolerated.
+        return facets(bytes, count);
     }
     Err(bad(format!(
         "truncated binary STL: {count} facets need {needed} bytes, file has {}",
@@ -200,7 +201,11 @@ pub fn from_obj(bytes: &[u8]) -> Result<Mesh, KernelError> {
                     let resolved = if idx > 0 {
                         idx - 1
                     } else if idx < 0 {
-                        mesh.positions.len() as i64 + idx
+                        // Negative indices resolve against the vertex
+                        // count; saturate rather than overflow on
+                        // inputs near `i64::MIN` — the range check
+                        // below still rejects them.
+                        (mesh.positions.len() as i64).saturating_add(idx)
                     } else {
                         return Err(fail("face index 0 is invalid (1-based)".into()));
                     };
@@ -328,6 +333,30 @@ f -4 -3 -2
                 .to_string()
                 .contains("no triangles")
         );
+    }
+
+    #[test]
+    fn obj_face_index_arithmetic_never_overflows() {
+        // `positions.len() + idx` overflowed for `idx` near i64::MIN
+        // before the range check ran — must be an error, not a panic.
+        for idx in [i64::MIN, i64::MIN + 1, i64::MAX, i64::MAX - 1] {
+            let text = format!("v 0 0 0\nv 1 0 0\nv 0 1 0\nf {idx} 1 2\n");
+            assert!(
+                parse(MeshFormat::Obj, text.as_bytes()).is_err(),
+                "face index {idx} must fail closed"
+            );
+        }
+    }
+
+    #[test]
+    fn stl_cap_binds_exact_length_files() {
+        // A self-consistent file size may not bypass the triangle cap:
+        // the exact-length path used to return before the count check.
+        let count = MAX_IMPORT_TRIANGLES + 1;
+        let mut bytes = vec![0u8; 84 + count * 50];
+        bytes[80..84].copy_from_slice(&(count as u32).to_le_bytes());
+        let err = from_binary_stl(&bytes).unwrap_err();
+        assert!(err.to_string().contains("capped"));
     }
 
     #[test]

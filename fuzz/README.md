@@ -15,7 +15,14 @@ or file can reach — no network, credentials, or production data:
   (`serve_stream`) fed arbitrary plugin stdout;
 - `store_migration` — `Snapshot` JSON plus real `.worldos` bytes opened
   through `SqliteStore::open` + `load` (schema migration, corrupt/garbage
-  rejection) inside a per-process temp dir.
+  rejection) inside a per-process temp dir;
+- `cad_selector` — `Selector` JSON (object and bare-string shorthand, as
+  accepted by `select`/`edge_select` params and persisted recipes)
+  resolved through `target()`/`resolve*` against a fixed box-like view
+  and a fuzzed `TopologyView`;
+- `mesh_import` — the hand-rolled binary-STL and OBJ parsers behind
+  `geometry.import`, plus the `geom:mesh` component decoder; decoded
+  meshes are pushed back through the STL/OBJ writers and re-parsed.
 
 Install the same pinned tools used by CI, then run any target from the
 repository root:
@@ -28,6 +35,8 @@ cargo +nightly-2026-08-20 fuzz run state_op_stream -- -max_total_time=60 -max_le
 cargo +nightly-2026-08-20 fuzz run json_rpc -- -max_total_time=60 -max_len=4096 -rss_limit_mb=2048
 cargo +nightly-2026-08-20 fuzz run plugin_protocol -- -max_total_time=60 -max_len=4096 -rss_limit_mb=2048
 cargo +nightly-2026-08-20 fuzz run store_migration -- -max_total_time=60 -max_len=65536 -rss_limit_mb=2048
+cargo +nightly-2026-08-20 fuzz run cad_selector -- -max_total_time=60 -max_len=4096 -rss_limit_mb=2048
+cargo +nightly-2026-08-20 fuzz run mesh_import -- -max_total_time=60 -max_len=65536 -rss_limit_mb=2048
 ```
 
 Pull requests and `main` receive a bounded smoke run; the weekly schedule

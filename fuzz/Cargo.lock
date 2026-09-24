@@ -846,6 +846,7 @@ dependencies = [
  "arbitrary",
  "libfuzzer-sys",
  "serde_json",
+ "worldos-cad",
  "worldos-capability",
  "worldos-commands",
  "worldos-engine",
