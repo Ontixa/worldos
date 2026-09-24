@@ -19,12 +19,18 @@ Brutally honest current-state constraints. Updated when reality changes.
 
 ## Persistence & recovery
 
-- **Crash-injection coverage is process-level only.**
+- **Crash-injection coverage stops at the transaction layer.**
   `worldos-store/tests/crash_recovery.rs` proves restart-after-`abort()`
   mid-write recovers the last committed snapshot and that a committed
   save survives an un-checkpointed WAL — via a real spawned process,
-  not a mocked failure. Injected I/O errors *inside* `SqliteStore`
-  (e.g. fsync failure mid-commit) are untested; the store relies on
+  not a mocked failure. `worldos-store/tests/fault_injection.rs`
+  (feature `fault-injection`) adds in-process injection inside
+  `SqliteStore`: any fault before the commit boundary rolls back to
+  the prior committed snapshot, a post-commit fault proves lost-ack
+  durability, mid-load faults fail cleanly, and non-transactional
+  torn writes fail closed (`NotFound`) or load hollow. Page-level
+  tears *below* the transaction layer — real `write`/`fsync` failures
+  inside SQLite's VFS — are still untested; the store relies on
   SQLite's own atomicity there.
 - **Save latency is real on Windows.** `synchronous=FULL` + WAL means
   `Engine::create`/`save` pay multiple fsyncs — measured 6.7–91.8s for
@@ -140,9 +146,10 @@ Brutally honest current-state constraints. Updated when reality changes.
 
 - Property tests now cover engine undo/redo round-trips, failed-
   transaction purity, save/reopen semantic equality, store snapshot
-  round-trips, and process-abort crash recovery (`proptest`, bounded
-  deterministic cases). libFuzzer targets cover the requirement
-  parser, `StateOp` streams, the JSON-RPC dispatch surface, the
-  plugin line protocol and store/migration input (`fuzz/`, bounded
-  smoke per PR + weekly campaign). Still missing: in-process
-  I/O-fault injection inside the store, and a migration matrix.
+  round-trips, process-abort crash recovery, and in-process
+  I/O-fault injection at the store's save/load boundaries
+  (`proptest`, bounded deterministic cases). libFuzzer targets cover
+  the requirement parser, `StateOp` streams, the JSON-RPC dispatch
+  surface, the plugin line protocol and store/migration input
+  (`fuzz/`, bounded smoke per PR + weekly campaign). Still missing:
+  a historical migration matrix.

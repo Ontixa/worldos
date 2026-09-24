@@ -2240,6 +2240,7 @@ dependencies = [
  "tracing",
  "worldos-commands",
  "worldos-kernel",
+ "worldos-store",
 ]
 
 [[package]]

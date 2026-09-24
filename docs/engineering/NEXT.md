@@ -42,7 +42,7 @@ the next ~5 items, not the backlog.
    `agent.run` (`done_when`/`max_iterations`/`max_commands`) and CLI
    `--done-when`. Remaining: natural-language goals still need a caller-
    supplied predicate — RulePlanner cannot synthesize one.
-7. **Adversarial hardening** — partly done: property tests shipped
+7. ~~**Adversarial hardening**~~ — done: property tests shipped
    (`proptest`): engine undo/redo round-trips + failed-transaction
    purity (`worldos-engine/tests/property_state_machine.rs`),
    save/reopen invariants over random projects incl. journal
@@ -65,9 +65,19 @@ the next ~5 items, not the backlog.
    (`positions.len() + idx` now saturates into the range check) and a
    `MAX_IMPORT_TRIANGLES` bypass for exact-length STL files (count is
    now capped before parsing, not only in `parse`).
-   Remaining: in-process I/O-fault injection inside the store
-   (current crash coverage is process abort, not injected `Write`
-   errors).
+   In-process I/O-fault injection shipped (`worldos-store` feature
+   `fault-injection`, `tests/fault_injection.rs`): `FaultPoint` hooks
+   at every real save/load boundary — row wipe, staged meta/object/
+   relation/journal writes (index updates ride the same transaction),
+   commit, post-commit, mid-load row streams — plus
+   `inject_torn_save`, a durable non-transactional wipe. Tests prove
+   the classification: any pre-commit fault rolls back to the prior
+   committed snapshot (integrity-check clean), a post-commit fault
+   reports an error for a durable save (lost-ack semantics), mid-load
+   faults fail without partial snapshots, and torn files fail closed
+   (`NotFound`) or load hollow — never half-old/half-new. Page-level
+   tears below the transaction layer remain SQLite's own atomicity
+   guarantee.
 
 ## Then
 

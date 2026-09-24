@@ -110,7 +110,15 @@ Only demonstrably working behavior is listed here. Verified on
   no graph or journal residue; random snapshots survive
   save→reopen byte-exact (project + history); spawned-process
   `abort()` mid-write and post-commit recovers the last committed
-  snapshot (`worldos-store/tests/crash_recovery.rs`).
+  snapshot (`worldos-store/tests/crash_recovery.rs`); in-process
+  I/O-fault injection inside `SqliteStore` (feature
+  `fault-injection`, `tests/fault_injection.rs`) proves pre-commit
+  faults roll back byte-exact, a post-commit fault leaves the new
+  snapshot durable (lost-ack), mid-load faults fail cleanly, and
+  non-transactional torn writes fail closed or load hollow.
+  libFuzzer targets cover the requirement parser, `StateOp`
+  streams, JSON-RPC dispatch, plugin protocol and migration input
+  (`fuzz/`).
 
 ## Verified external dependency
 
@@ -128,8 +136,5 @@ Only demonstrably working behavior is listed here. Verified on
   cardinality can change across regeneration.
 - Deep regen: `cad.regenerate` replays one node using sources' current
   BReps; no topological replay of a stale chain yet.
-- In-process I/O-fault injection inside the store (fuzz targets now
-  cover the requirement parser, StateOp streams, JSON-RPC, plugin
-  protocol and migration input — see `fuzz/`).
 - Plugin sandboxing (native plugins are trusted local code).
 - Collaboration / multi-writer.
