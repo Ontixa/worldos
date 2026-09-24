@@ -128,7 +128,8 @@ Only demonstrably working behavior is listed here. Verified on
   cardinality can change across regeneration.
 - Deep regen: `cad.regenerate` replays one node using sources' current
   BReps; no topological replay of a stale chain yet.
-- Fuzz targets (requirement parser, StateOp streams, JSON-RPC, plugin
-  protocol, migration input) and in-process I/O-fault injection.
+- In-process I/O-fault injection inside the store (fuzz targets now
+  cover the requirement parser, StateOp streams, JSON-RPC, plugin
+  protocol and migration input — see `fuzz/`).
 - Plugin sandboxing (native plugins are trusted local code).
 - Collaboration / multi-writer.

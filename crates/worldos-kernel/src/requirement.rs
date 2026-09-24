@@ -81,12 +81,16 @@ fn evaluate_inner(
 
 // ------------------------------------------------------------------ grammar
 
+/// Bound on recursive descent: `not`/paren nesting deeper than this fails
+/// with `InvalidInput` instead of overflowing the stack on hostile input.
+const MAX_EXPR_DEPTH: usize = 128;
+
 fn eval_expr(
     project: &Project,
     expr: &str,
     refs: &mut BTreeSet<crate::ObjectId>,
 ) -> Result<bool, KernelError> {
-    eval_or(project, expr.trim(), refs)
+    eval_or(project, expr.trim(), refs, 0)
 }
 
 /// `a or b or …` — split at top-level ` or ` only (not inside parens/quotes).
@@ -94,9 +98,10 @@ fn eval_or(
     project: &Project,
     s: &str,
     refs: &mut BTreeSet<crate::ObjectId>,
+    depth: usize,
 ) -> Result<bool, KernelError> {
     for part in split_top(s, " or ") {
-        if eval_and(project, part, refs)? {
+        if eval_and(project, part, refs, depth)? {
             return Ok(true);
         }
     }
@@ -107,9 +112,10 @@ fn eval_and(
     project: &Project,
     s: &str,
     refs: &mut BTreeSet<crate::ObjectId>,
+    depth: usize,
 ) -> Result<bool, KernelError> {
     for part in split_top(s, " and ") {
-        if !eval_not(project, part, refs)? {
+        if !eval_not(project, part, refs, depth)? {
             return Ok(false);
         }
     }
@@ -120,33 +126,40 @@ fn eval_not(
     project: &Project,
     s: &str,
     refs: &mut BTreeSet<crate::ObjectId>,
+    depth: usize,
 ) -> Result<bool, KernelError> {
+    if depth > MAX_EXPR_DEPTH {
+        return Err(KernelError::InvalidInput(
+            "expression nested too deeply".into(),
+        ));
+    }
     let s = s.trim();
     if let Some(rest) = s.strip_prefix("not ") {
-        return Ok(!eval_not(project, rest, refs)?);
+        return Ok(!eval_not(project, rest, refs, depth + 1)?);
     }
     if let Some(rest) = s.strip_prefix("not(")
         && let Some(inner) = rest.strip_suffix(')')
         && balanced(inner)
     {
-        return Ok(!eval_expr(project, inner, refs)?);
+        return Ok(!eval_or(project, inner.trim(), refs, depth + 1)?);
     }
     if s.starts_with('(') && s.ends_with(')') && balanced(&s[1..s.len() - 1]) {
-        return eval_expr(project, &s[1..s.len() - 1], refs);
+        return eval_or(project, s[1..s.len() - 1].trim(), refs, depth + 1);
     }
     eval_cmp(project, s, refs)
 }
 
 /// Split `s` on `sep` occurring at paren-depth 0 outside quotes.
+/// `i` only ever lands on char boundaries: it advances by whole chars,
+/// or by `sep.len()` on a match (separators are ASCII).
 fn split_top<'a>(s: &'a str, sep: &str) -> Vec<&'a str> {
     let mut parts = Vec::new();
-    let bytes = s.as_bytes();
     let mut depth = 0i32;
     let mut quote = None;
     let mut start = 0;
     let mut i = 0;
-    while i < bytes.len() {
-        let c = bytes[i] as char;
+    while i < s.len() {
+        let c = s[i..].chars().next().unwrap();
         match quote {
             Some(q) if c == q => quote = None,
             Some(_) => {}
@@ -161,7 +174,7 @@ fn split_top<'a>(s: &'a str, sep: &str) -> Vec<&'a str> {
             }
             _ => {}
         }
-        i += 1;
+        i += c.len_utf8();
     }
     parts.push(&s[start..]);
     parts
@@ -213,13 +226,14 @@ fn eval_cmp(
 
 /// Find a top-level comparison operator (skipping parens/quotes so
 /// `!=` inside `object(...)` args can't split early).
+/// `i` only ever lands on char boundaries (same discipline as
+/// [`split_top`]); multi-byte terms can't panic the slice.
 fn split_cmp(expr: &str) -> Result<(&str, &str, &str), KernelError> {
-    let bytes = expr.as_bytes();
     let mut depth = 0i32;
     let mut quote = None;
     let mut i = 0;
-    while i < bytes.len() {
-        let c = bytes[i] as char;
+    while i < expr.len() {
+        let c = expr[i..].chars().next().unwrap();
         match quote {
             Some(q) if c == q => quote = None,
             Some(_) => {}
@@ -235,7 +249,7 @@ fn split_cmp(expr: &str) -> Result<(&str, &str, &str), KernelError> {
             }
             _ => {}
         }
-        i += 1;
+        i += c.len_utf8();
     }
     Ok((expr, "==", "true"))
 }
@@ -346,4 +360,62 @@ fn find_named<'a>(
         .ok_or_else(|| KernelError::ObjectNotFound(name.into()))?;
     refs.insert(obj.id);
     Ok(obj)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::known::{components, types};
+
+    fn probe(expr: &str) -> Object {
+        let actor = crate::ids::ActorId::new("test");
+        let mut req = Object::new(types::REQUIREMENT, "req", &actor);
+        req.set_component(crate::Component::new(
+            components::REQUIREMENT_EXPR,
+            serde_json::json!({"expression": expr}),
+        ));
+        req
+    }
+
+    #[test]
+    fn deep_parens_fail_instead_of_overflowing() {
+        let project = Project::new("t");
+        let expr = format!("{}true{}", "(".repeat(5000), ")".repeat(5000));
+        let (status, verdict) = evaluate(&project, &probe(&expr));
+        assert_eq!(status, RequirementStatus::Unknown);
+        assert!(verdict.contains("nested too deeply"), "{verdict}");
+    }
+
+    #[test]
+    fn deep_not_chain_fails_instead_of_overflowing() {
+        let project = Project::new("t");
+        let expr = format!("{}true", "not ".repeat(5000));
+        let (status, verdict) = evaluate(&project, &probe(&expr));
+        assert_eq!(status, RequirementStatus::Unknown);
+        assert!(verdict.contains("nested too deeply"), "{verdict}");
+    }
+
+    #[test]
+    fn multibyte_input_does_not_panic() {
+        // Regression: split_top/split_cmp used to walk raw bytes and
+        // slice `s[i..]` mid-char — any multi-byte term panicked.
+        let project = Project::new("t");
+        for expr in [
+            "�",
+            "é >= 1",
+            "exists(geom:cube) or 日本語",
+            "count(geom:cube) and caf\u{00e9}",
+            "'💥' == 1",
+        ] {
+            let _ = evaluate(&project, &probe(expr));
+        }
+    }
+
+    #[test]
+    fn moderate_nesting_still_evaluates() {
+        let project = Project::new("t");
+        let expr = format!("{}1 >= 1{}", "(".repeat(64), ")".repeat(64));
+        let (status, _) = evaluate(&project, &probe(&expr));
+        assert_eq!(status, RequirementStatus::Pass);
+    }
 }

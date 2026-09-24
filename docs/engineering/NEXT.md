@@ -51,11 +51,17 @@ the next ~5 items, not the backlog.
    `abort()` mid-write and post-commit, truncation/garbage rejection).
    Found + fixed: stale journal index after redo-tail truncation,
    `project.rename` undo writing `settings["__name"]`, unbounded
-   `core:contains` cycle traversal. Remaining: fuzz targets
-   (requirement parser, StateOp streams, JSON-RPC, plugin protocol,
-   migration input) and in-process I/O-fault injection inside the
-   store (current crash coverage is process abort, not injected
-   `Write` errors).
+   `core:contains` cycle traversal. Fuzz targets shipped (`fuzz/`,
+   libFuzzer via cargo-fuzz, own workspace): `requirement_expr`,
+   `state_op_stream`, `json_rpc`, `plugin_protocol`,
+   `store_migration` — bounded smoke on PR/main, 5-minute weekly
+   campaign (`.github/workflows/fuzz.yml`). Found + fixed on first
+   campaign: UTF-8 char-boundary panic in `split_top`/`split_cmp`
+   (any multi-byte input crashed the requirement parser), plus a
+   pre-emptive `MAX_EXPR_DEPTH` cap on `not`/paren recursion.
+   Remaining: in-process I/O-fault injection inside the store
+   (current crash coverage is process abort, not injected `Write`
+   errors).
 
 ## Then
 

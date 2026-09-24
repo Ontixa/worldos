@@ -1,0 +1,66 @@
+name: Fuzz
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  schedule:
+    - cron: "17 3 * * 4"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  input-boundaries:
+    name: Fuzz input boundaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      WORLDOS_FUZZ_SECONDS: ${{ github.event_name == 'schedule' && '300' || '30' }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install pinned nightly Rust toolchain
+        run: rustup toolchain install nightly-2026-08-20 --profile minimal
+
+      - name: Install pinned cargo-fuzz
+        run: cargo install cargo-fuzz --version 0.13.2 --locked
+
+      - name: Fuzz requirement-expression parser
+        run: >-
+          cargo +nightly-2026-08-20 fuzz run requirement_expr --
+          -max_total_time=${WORLDOS_FUZZ_SECONDS} -timeout=10 -max_len=4096
+          -rss_limit_mb=2048
+
+      - name: Fuzz StateOp stream apply
+        run: >-
+          cargo +nightly-2026-08-20 fuzz run state_op_stream --
+          -max_total_time=${WORLDOS_FUZZ_SECONDS} -timeout=10 -max_len=4096
+          -rss_limit_mb=2048
+
+      - name: Fuzz JSON-RPC dispatch
+        run: >-
+          cargo +nightly-2026-08-20 fuzz run json_rpc --
+          -max_total_time=${WORLDOS_FUZZ_SECONDS} -timeout=10 -max_len=4096
+          -rss_limit_mb=2048
+
+      - name: Fuzz plugin line protocol
+        run: >-
+          cargo +nightly-2026-08-20 fuzz run plugin_protocol --
+          -max_total_time=${WORLDOS_FUZZ_SECONDS} -timeout=10 -max_len=4096
+          -rss_limit_mb=2048
+
+      - name: Fuzz store migration input
+        run: >-
+          cargo +nightly-2026-08-20 fuzz run store_migration --
+          -max_total_time=${WORLDOS_FUZZ_SECONDS} -timeout=10 -max_len=65536
+          -rss_limit_mb=2048

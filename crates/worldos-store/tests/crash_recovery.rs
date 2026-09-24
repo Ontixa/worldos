@@ -398,17 +398,17 @@ fn arb_snapshot() -> impl Strategy<Value = Snapshot> {
                                     }
                                     StateOp::object_created(o)
                                 }),
-                            OpSpec::UpdateObj(ix, _cix, ref v) => project
-                                .objects
-                                .get(&obj_ids[ix as usize % obj_ids.len().max(1)])
+                            OpSpec::UpdateObj(ix, _cix, ref v) => obj_ids
+                                .get(ix as usize % obj_ids.len().max(1))
+                                .and_then(|id| project.objects.get(id))
                                 .map(|o| {
                                     let mut after = o.clone();
                                     after.set_component(Component::new("app:edited", v.clone()));
                                     StateOp::object_updated(o.clone(), after)
                                 }),
-                            OpSpec::DeleteObj(ix) => project
-                                .objects
-                                .get(&obj_ids[ix as usize % obj_ids.len().max(1)])
+                            OpSpec::DeleteObj(ix) => obj_ids
+                                .get(ix as usize % obj_ids.len().max(1))
+                                .and_then(|id| project.objects.get(id))
                                 .map(|o| StateOp::object_deleted(o.clone())),
                             OpSpec::CreateRel(rix, a, b) => {
                                 if obj_ids.len() < 2 {
